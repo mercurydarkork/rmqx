@@ -102,30 +102,30 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
     use bytes::BufMut;
     use std::fmt::Write;
     use tokio::time::delay_for;
-    tokio::spawn(async move {
-        let mut packet_id = 0u16;
-        let stat = Arc::clone(&state);
-        loop {
-            let mut paylaod = bytes::BytesMut::from("broadcast ");
-            paylaod.write_str(&packet_id.to_string()).unwrap();
-            let _res = stat
-                .broadcast(Publish {
-                    dup: false,
-                    retain: false,
-                    qos: QoS::AtLeastOnce,
-                    topic: ByteString::from("$sys/broadcast"),
-                    packet_id: Some(packet_id),
-                    payload: paylaod.to_bytes(),
-                })
-                .await;
-            if u16::max_value() == packet_id {
-                packet_id = 0;
-            } else {
-                packet_id += 1;
-            }
-            delay_for(Duration::from_millis(5000)).await;
-        }
-    });
+    // tokio::spawn(async move {
+    //     let mut packet_id = 0u16;
+    //     let stat = Arc::clone(&state);
+    //     loop {
+    //         let mut paylaod = bytes::BytesMut::from("broadcast ");
+    //         paylaod.write_str(&packet_id.to_string()).unwrap();
+    //         let _res = stat
+    //             .broadcast(Publish {
+    //                 dup: false,
+    //                 retain: false,
+    //                 qos: QoS::AtLeastOnce,
+    //                 topic: ByteString::from("$sys/broadcast"),
+    //                 packet_id: Some(packet_id),
+    //                 payload: paylaod.to_bytes(),
+    //             })
+    //             .await;
+    //         if u16::max_value() == packet_id {
+    //             packet_id = 0;
+    //         } else {
+    //             packet_id += 1;
+    //         }
+    //         delay_for(Duration::from_millis(5000)).await;
+    //     }
+    // });
     let mut listener = TcpListener::bind(laddr.as_ref()).await?;
     println!("listening mqtt.tcp on {}", laddr.as_ref());
     loop {

@@ -10,7 +10,7 @@ import (
 
 func newClient(id int) {
 	opts := mqtt.NewClientOptions().
-		AddBroker("tcp://127.0.0.1:1883").
+		AddBroker("tcp://127.0.0.1:6315").
 		SetClientID(fmt.Sprintf("%v", id)).
 		SetKeepAlive(13 * time.Second).
 		SetProtocolVersion(4).
@@ -43,8 +43,19 @@ func newClient(id int) {
 			// fmt.Printf("onPublish %+v\n", msg)
 		}); token.Wait() && token.Error() != nil {
 			fmt.Println(token.Error())
+			time.Sleep(time.Second)
+			continue
 		}
-		time.Sleep(time.Second)
+		break
+	}
+
+	for {
+		if token := c.Publish("/aaa/bbb", 1, false, "payload"); token.Wait() && token.Error() != nil {
+			fmt.Println(token.Error())
+			time.Sleep(time.Second)
+			continue
+		}
+		time.Sleep(5 * time.Second)
 	}
 }
 
@@ -53,7 +64,6 @@ var n = flag.Int("n", 100, "")
 func main() {
 	flag.Parse()
 	for i := 0; i < *n; i++ {
-		time.Sleep(5 * time.Millisecond)
 		go newClient(i)
 	}
 
