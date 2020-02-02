@@ -45,7 +45,50 @@ pub async fn serve_coap<T: AsRef<str>>(laddr: T) -> Result<()> {
         .await?;
     Ok(())
 }
-pub async fn serve_webapi<T: AsRef<str>>(_laddr: T) -> Result<()> {
+pub async fn serve_webapi<T: AsRef<str>>(laddr: T) -> Result<()> {
+    use hyper::service::{make_service_fn, service_fn};
+    use hyper::{header, Body, Client, Method, Request, Response, Server, StatusCode};
+    use std::net::SocketAddr;
+    let laddr: SocketAddr = laddr.as_ref().parse().unwrap();
+    static INTERNAL_SERVER_ERROR: &[u8] = b"Internal Server Error";
+    static NOTFOUND: &[u8] = b"Not Found";
+
+    #[derive(Serialize, Deserialize)]
+    struct State {
+        clients: usize,
+    }
+
+    async fn state_clients() -> Result<Response<Body>> {
+        let data = json!({
+            "clients":&state.client_num().await,
+        });
+        let res = match serde_json::to_string(&data) {
+            Ok(json) => Response::builder()
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(json))
+                .unwrap(),
+            Err(_) => Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(INTERNAL_SERVER_ERROR.into())
+                .unwrap(),
+        };
+        Ok(res)
+    }
+    async fn handle(req: Request<Body>) -> Result<Response<Body>> {
+        match (req.method(), req.uri().path()) {
+            (&Method::GET, "/state/_clients") => state_clients().await,
+            _ => Ok(Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(NOTFOUND.into())
+                .unwrap()),
+        }
+    }
+    let make_service = make_service_fn(|_conn| async { Ok::<_, Error>(service_fn(handle)) });
+    let server = Server::bind(&laddr).serve(make_service);
+    println!("listening argonx.webapi on {}", laddr);
+    if let Err(e) = server.await {
+        eprintln!("server error: {}", e);
+    }
     Ok(())
 }
 
@@ -154,8 +197,8 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
         }
     }
 }
-
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+pub type Error = Box<dyn std::error::Error + Send + Sync>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 pub type Tx = mpsc::UnboundedSender<Publish>;
 
@@ -163,14 +206,12 @@ pub type Rx = mpsc::UnboundedReceiver<Publish>;
 
 pub struct Shared {
     peers: RwLock<HashMap<ByteString, Tx>>,
-    num: RwLock<usize>,
 }
 
 impl Shared {
     fn new() -> Self {
         Shared {
             peers: RwLock::new(HashMap::new()),
-            num: RwLock::new(0),
         }
     }
 
@@ -191,16 +232,6 @@ impl Shared {
         ret
     }
     pub async fn broadcast(&self, message: Publish) {
-        // if let Ok(mut peers) = self.peers.try_lock() {
-        //     for peer in peers.iter_mut() {
-        //         match peer.1.send(message.clone()) {
-        //             Ok(_) => return Ok(()),
-        //             Err(_) => return Err(Box::new(ParseError::InvalidClientId)),
-        //         }
-        //     }
-        // } else {
-        //     println!("获取锁失败");
-        // }
         println!("broadcast {}", self.client_num().await);
         for peer in self.peers.read().await.iter() {
             if let Err(e) = peer.1.send(message.clone()) {
@@ -209,16 +240,6 @@ impl Shared {
         }
     }
     pub async fn forward(&self, client_id: ByteString, message: Publish) -> Result<()> {
-        // if let Ok(peers) = self.peers.try_lock() {
-        //     if let Some(tx) = peers.get(&client_id) {
-        //         match tx.send(message.clone()) {
-        //             Ok(_) => return Ok(()),
-        //             Err(_) => return Err(Box::new(ParseError::InvalidClientId)),
-        //         }
-        //     }
-        // } else {
-        //     println!("获取锁失败");
-        // }
         if let Some(tx) = self.peers.read().await.get(&client_id) {
             if let Err(_e) = tx.send(message.clone()) {
                 return Err(Box::new(ParseError::InvalidClientId));
