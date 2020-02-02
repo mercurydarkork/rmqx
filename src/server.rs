@@ -123,7 +123,7 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
             } else {
                 packet_id += 1;
             }
-            delay_for(Duration::from_millis(10000)).await;
+            delay_for(Duration::from_millis(5000)).await;
         }
     });
     let mut listener = TcpListener::bind(laddr.as_ref()).await?;

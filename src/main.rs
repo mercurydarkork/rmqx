@@ -61,9 +61,10 @@ use tokio::runtime::Builder;
 // }
 
 fn main() {
-    let laddr = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "0.0.0.0:1883".to_string());
+    // let laddr = env::args()
+    //     .nth(1)
+    //     .unwrap_or_else(|| "0.0.0.0:1883".to_string());
+    let laddr = "0.0.0.0:1883".to_owned();
     let laddr2 = "0.0.0.0:8883".to_owned();
     let laddr3 = "0.0.0.0:80".to_owned();
     let laddr4 = "0.0.0.0:443".to_owned();
