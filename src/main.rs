@@ -15,7 +15,7 @@ mod server;
 use futures::join;
 use server::*;
 use std::*;
-use tokio::runtime::Builder;
+// use tokio::runtime::Builder;
 
 // #[tokio::main]
 // async fn main() -> Result<()> {
@@ -69,9 +69,9 @@ fn main() {
     //     .nth(1)
     //     .unwrap_or_else(|| "0.0.0.0:1883".to_string());
     let laddr = "0.0.0.0:6315".to_owned();
-    let laddr2 = "0.0.0.0:8883".to_owned();
-    let laddr3 = "0.0.0.0:80".to_owned();
-    let laddr4 = "0.0.0.0:443".to_owned();
+    //let laddr2 = "0.0.0.0:8883".to_owned();
+    //let laddr3 = "0.0.0.0:80".to_owned();
+    //let laddr4 = "0.0.0.0:443".to_owned();
     let laddr5 = "0.0.0.0:5555".to_owned();
     let laddr6 = "0.0.0.0:5683".to_owned();
     // std::thread::spawn(move || {

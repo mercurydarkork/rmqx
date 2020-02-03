@@ -18,9 +18,6 @@ pub use self::error::*;
 pub use self::packet::*;
 pub use self::proto::*;
 pub use self::topic::*;
-// http://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml
-pub const TCP_PORT: u16 = 1883;
-pub const SSL_PORT: u16 = 8883;
 
 use bytes::BytesMut;
 use std::io::Cursor;
@@ -96,7 +93,6 @@ impl Decoder for MqttCodec {
                     let fixed = src.as_ref()[0];
                     match decode_variable_length(&src.as_ref()[1..])? {
                         Some((remaining_length, consumed)) => {
-                            // check max message size
                             if self.max_size != 0 && self.max_size < remaining_length {
                                 return Err(ParseError::MaxSizeExceeded);
                             }
