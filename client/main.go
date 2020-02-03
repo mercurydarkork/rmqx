@@ -50,14 +50,14 @@ func newClient(id int) {
 		break
 	}
 
-	for {
-		if token := c.Publish("/aaa/bbb", 1, false, "payload"); token.Wait() && token.Error() != nil {
-			fmt.Println(token.Error())
-			time.Sleep(time.Second)
-			continue
-		}
-		time.Sleep(55 * time.Second)
-	}
+	// for {
+	// 	if token := c.Publish("/aaa/bbb", 1, false, "payload"); token.Wait() && token.Error() != nil {
+	// 		fmt.Println(token.Error())
+	// 		time.Sleep(time.Second)
+	// 		continue
+	// 	}
+	// 	time.Sleep(55 * time.Second)
+	// }
 }
 
 var n = flag.Int("n", 100, "")
