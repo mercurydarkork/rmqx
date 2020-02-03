@@ -176,8 +176,8 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
             Ok((socket, addr)) => {
                 socket.set_nodelay(true)?;
                 socket.set_keepalive(None)?;
-                socket.set_recv_buffer_size(4096)?;
-                socket.set_send_buffer_size(4096)?;
+                // socket.set_recv_buffer_size(4096)?;
+                // socket.set_send_buffer_size(4096)?;
                 tokio::spawn(async move {
                     let stat = Arc::clone(&state);
                     let mut peer =
