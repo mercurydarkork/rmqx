@@ -91,11 +91,11 @@ fn main() {
     tokio::runtime::Runtime::new()
         .unwrap()
         .block_on(async move {
-            // let coap = async {
-            //     if let Err(err) = serve_coap(&laddr6).await {
-            //         println!("listening coap.udp on {}, {}", laddr6, err);
-            //     }
-            // };
+            let coap = async {
+                if let Err(err) = serve_coap(&laddr6).await {
+                    println!("listening coap.udp on {}, {}", laddr6, err);
+                }
+            };
             let task = async {
                 if let Err(err) = serve(&laddr).await {
                     println!("listening mqtt.tcp on {}, {}", laddr, err);
@@ -121,6 +121,6 @@ fn main() {
                     println!("listening webapi on {}, {}", laddr5, err);
                 }
             };
-            let _ret = join!(task, wapi);
+            let _ret = join!(coap, task, wapi);
         });
 }

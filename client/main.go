@@ -3,15 +3,17 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/google/uuid"
 )
 
 func newClient(id int) {
 	opts := mqtt.NewClientOptions().
-		AddBroker("tcp://127.0.0.1:6315").
-		SetClientID(fmt.Sprintf("%v", id)).
+		AddBroker(fmt.Sprintf("tcp://%s", os.Args[1])).
+		SetClientID(fmt.Sprintf("%v-%s", id, uuid.New().String())).
 		SetKeepAlive(13 * time.Second).
 		SetProtocolVersion(4).
 		SetCleanSession(true).
