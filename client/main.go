@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -12,7 +11,7 @@ import (
 
 func newClient(id int) {
 	opts := mqtt.NewClientOptions().
-		AddBroker(fmt.Sprintf("tcp://%s", os.Args[1])).
+		AddBroker(fmt.Sprintf("tcp://%s", *addr)).
 		SetClientID(fmt.Sprintf("%v-%s", id, uuid.New().String())).
 		SetKeepAlive(13 * time.Second).
 		SetProtocolVersion(4).
@@ -62,6 +61,7 @@ func newClient(id int) {
 }
 
 var n = flag.Int("n", 100, "")
+var addr = flag.String("a", "127.0.0.1:6315", "")
 
 func main() {
 	flag.Parse()
