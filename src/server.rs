@@ -182,7 +182,7 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
                     let stat = Arc::clone(&state);
                     let mut peer =
                         crate::peer::Peer::new(stat, Framed::new(socket, MqttCodec::new()));
-                    peer.set_ttl(Duration::from_secs(15));
+                    peer.set_ttl(Duration::from_secs(60));
                     if let Err(e) = peer.process().await {
                         println!(
                             "failed to process connection {} {}; error = {}",

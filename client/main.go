@@ -13,10 +13,10 @@ func newClient(id int) {
 	opts := mqtt.NewClientOptions().
 		AddBroker(fmt.Sprintf("tcp://%s", *addr)).
 		SetClientID(fmt.Sprintf("%v-%s", id, uuid.New().String())).
-		SetKeepAlive(13 * time.Second).
+		SetKeepAlive(58 * time.Second).
 		SetProtocolVersion(4).
 		SetCleanSession(true).
-		SetPingTimeout(10 * time.Second).
+		SetPingTimeout(58 * time.Second).
 		SetMaxReconnectInterval(time.Second).
 		SetConnectTimeout(15 * time.Second).
 		SetUsername("uname").
@@ -56,7 +56,7 @@ func newClient(id int) {
 			time.Sleep(time.Second)
 			continue
 		}
-		time.Sleep(5 * time.Second)
+		time.Sleep(55 * time.Second)
 	}
 }
 
