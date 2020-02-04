@@ -179,9 +179,8 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
                 // socket.set_recv_buffer_size(4096)?;
                 // socket.set_send_buffer_size(4096)?;
                 tokio::spawn(async move {
-                    let stat = Arc::clone(&state);
-                    let mut peer =
-                        crate::peer::Peer::new(stat, Framed::new(socket, MqttCodec::new()));
+                    //let stat = Arc::clone(&state);
+                    let mut peer = crate::peer::Peer::new(Framed::new(socket, MqttCodec::new()));
                     peer.set_ttl(Duration::from_secs(60));
                     if let Err(e) = peer.process().await {
                         println!(
