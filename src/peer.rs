@@ -75,10 +75,6 @@ where
             return Err(Box::new(e));
         }
         Ok(())
-        // match timeout(self.ttl, self.transport.send(packet)).await {
-        //     Ok(_) => Ok(()),
-        //     Err(_) => return Err(Box::new(ParseError::Timeout(self.ttl))),
-        // }
     }
     async fn send_disconnect(&mut self) -> Result<()> {
         let disconnect = Packet::Disconnect {};
@@ -188,46 +184,6 @@ where
                 Err(e) => return Err(e),
             }
         }
-        // while let Ok(Some(msg)) = self.receive().await {
-        //     match msg {
-        //         Message::Forward(publish) => self.publish(publish).await?,
-        //         Message::Received(req) => match req {
-        //             Packet::PublishAck { .. } => {}
-        //             Packet::Disconnect => {}
-        //             Packet::PingRequest => self.send_pong().await?,
-        //             Packet::Connect(_) => {
-        //                 self.send_connect_ack(false, ConnectCode::NotAuthorized)
-        //                     .await?;
-        //                 self.send_disconnect().await?
-        //             }
-        //             Packet::Publish(publish) => {
-        //                 if publish.qos == QoS::AtLeastOnce {
-        //                     self.send_publish_ack(publish.packet_id.unwrap()).await?;
-        //                 } else if publish.qos == QoS::ExactlyOnce {
-        //                     self.send_publish_received(publish.packet_id.unwrap())
-        //                         .await?;
-        //                 }
-        //             }
-        //             Packet::PublishRelease { packet_id } => {
-        //                 self.send_publish_complete(packet_id).await?
-        //             }
-        //             Packet::PublishComplete { .. } => {}
-        //             Packet::PublishReceived { packet_id } => {
-        //                 self.send_publish_release(packet_id).await?
-        //             }
-        //             Packet::Subscribe {
-        //                 packet_id,
-        //                 topic_filters: _,
-        //             } => self.send_subscribe_ack(packet_id).await?,
-        //             Packet::Unsubscribe {
-        //                 packet_id,
-        //                 topic_filters: _,
-        //             } => self.send_unsubscribe_ack(packet_id).await?,
-        //             _ => {}
-        //         },
-        //     }
-        // }
-        // Ok(())
     }
 
     pub async fn handshake(&mut self) -> Result<()> {
@@ -246,46 +202,6 @@ where
         } else {
             Err(Box::new(ParseError::Timeout(ttl)))
         }
-        // if let Ok(Some(Ok(Packet::Connect(connect)))) = timeout(ttl, self.transport.next()).await {
-        //     if connect.protocol.level() != 4 {
-        //         self.send_connect_ack(false, ConnectCode::UnacceptableProtocolVersion)
-        //             .await?;
-        //         return Err(Box::new(ParseError::UnsupportedProtocolLevel));
-        //     }
-        //     self.send_connect_ack(true, ConnectCode::ConnectionAccepted)
-        //         .await
-        // let url = format!(
-        //     "https://baidu.com/?client_id={}&username={}&password={}",
-        //     connect.client_id,
-        //     connect.username.unwrap_or(bytestring::ByteString::new()),
-        //     base64::encode(connect.password.unwrap_or(bytes::Bytes::default()).bytes()),
-        // );
-        // // let params = [("foo", "bar"), ("baz", "quux")];
-        // let client = reqwest::ClientBuilder::new()
-        //     .timeout(Duration::from_secs(5))
-        //     .build()?;
-        // println!("url {}", &url);
-        // let resp = client.post(&url).send().await?;
-        // println!("http {:#?}", resp);
-        // if 200 == 200 {
-        //     let ack = Packet::ConnectAck {
-        //         session_present: true,
-        //         return_code: ConnectCode::ConnectionAccepted,
-        //     };
-        //     self.transport.send(ack).await?;
-        //     self.client_id = connect.client_id;
-        //     Ok(())
-        // } else {
-        //     let ack = Packet::ConnectAck {
-        //         session_present: true,
-        //         return_code: ConnectCode::BadUserNameOrPassword,
-        //     };
-        //     self.transport.send(ack).await?;
-        //     Err(Box::new(ParseError::InvalidClientId))
-        // }
-        // } else {
-        //     Err(Box::new(ParseError::Timeout(ttl)))
-        // }
     }
 }
 
