@@ -31,7 +31,7 @@ pub struct Peer<T, U> {
     transport: Framed<T, U>,
     ttl: Duration,
     rx: Option<Rx>,
-    //state: Arc<Shared>,
+    state: Arc<Shared>,
 }
 
 impl<T, U> Peer<T, U>
@@ -40,22 +40,13 @@ where
     U: Decoder<Item = Packet, Error = ParseError>,
     U: Encoder<Item = Packet, Error = ParseError>,
 {
-    // pub fn new(state: Arc<Shared>, transport: Framed<T, U>) -> Self {
-    //     Self {
-    //         client_id: bytestring::ByteString::new(),
-    //         transport: transport,
-    //         ttl: Duration::from_secs(60),
-    //         rx: None,
-    //         state: state,
-    //     }
-    // }
-
-    pub fn new(transport: Framed<T, U>) -> Self {
+    pub fn new(state: Arc<Shared>, transport: Framed<T, U>) -> Self {
         Self {
             client_id: bytestring::ByteString::new(),
             transport: transport,
             ttl: Duration::from_secs(60),
             rx: None,
+            state: state,
         }
     }
 
@@ -151,9 +142,9 @@ where
 
     pub async fn process(&mut self) -> Result<()> {
         self.handshake().await?;
-        let (_tx, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::unbounded_channel();
         self.rx = Some(rx);
-        //self.state.addPeer(self.client_id.clone(), tx).await;
+        self.state.addPeer(self.client_id.clone(), tx).await;
         loop {
             match self.receive().await {
                 Ok(Some(Message::Forward(publish))) => self.publish(publish).await?,

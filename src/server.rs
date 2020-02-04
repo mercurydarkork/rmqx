@@ -175,12 +175,13 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
         match listener.accept().await {
             Ok((socket, addr)) => {
                 socket.set_nodelay(true)?;
-                socket.set_keepalive(None)?;
+                socket.set_keepalive(Some(std::time::Duration::new(60, 0)))?;
                 // socket.set_recv_buffer_size(4096)?;
                 // socket.set_send_buffer_size(4096)?;
                 tokio::spawn(async move {
-                    //let stat = Arc::clone(&state);
-                    let mut peer = crate::peer::Peer::new(Framed::new(socket, MqttCodec::new()));
+                    let stat = Arc::clone(&state);
+                    let mut peer =
+                        crate::peer::Peer::new(stat, Framed::new(socket, MqttCodec::new()));
                     peer.set_ttl(Duration::from_secs(60));
                     if let Err(e) = peer.process().await {
                         println!(
@@ -190,6 +191,7 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
                     }
                     //println!("connection {} closed", addr);
                     &state.removePeer(&peer.client_id).await;
+                    drop(peer)
                 });
             }
             Err(e) => println!("error accepting socket; error = {:?}", e),
@@ -221,14 +223,15 @@ impl Shared {
         self.peers.write().await.insert(client_id.clone(), tx);
         // println!("add peer {} {}", client_id, self.peers.read().await.len());
     }
-    pub async fn removePeer(&self, client_id: &ByteString) -> Option<Tx> {
-        let ret = self.peers.write().await.remove(client_id);
+    pub async fn removePeer(&self, client_id: &ByteString) {
+        if let Some(tx) = self.peers.write().await.remove(client_id) {
+            drop(tx);
+        }
         // println!(
         //     "remove peer {} {}",
         //     client_id,
         //     self.peers.read().await.len()
         // );
-        ret
     }
     pub async fn broadcast(&self, message: Publish) {
         println!("broadcast {}", self.client_num().await);
