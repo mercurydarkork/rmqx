@@ -234,7 +234,7 @@ impl Shared {
         self.peers.read().len()
     }
     pub fn add_peer(&self, client_id: ByteString, tx: Tx) {
-        self.peers.write().insert(client_id.clone(), tx);
+        self.peers.write().insert(client_id, tx);
     }
 
     pub fn remove_peer(&self, client_id: &ByteString) {
