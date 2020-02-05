@@ -181,9 +181,8 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
                 socket.set_nodelay(true)?;
                 socket.set_keepalive(Some(std::time::Duration::new(60, 0)))?;
                 tokio::spawn(async move {
-                    let stat = Arc::clone(&state);
-                    let mut peer =
-                        crate::peer::Peer::new(stat, Framed::new(socket, MqttCodec::new()));
+                    //let stat = Arc::clone(&state);
+                    let mut peer = crate::peer::Peer::new(Framed::new(socket, MqttCodec::new()));
                     peer.set_keep_alive(Duration::from_secs(60));
                     if let Ok(()) = peer
                         .handshake(|p| {

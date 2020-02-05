@@ -31,7 +31,7 @@ pub struct Peer<T, U> {
     transport: Framed<T, U>,
     keep_alive: Duration,
     pub rx: Option<Rx>,
-    state: Arc<Shared>,
+    // state: Arc<Shared>,
 }
 
 impl<T, U> Peer<T, U>
@@ -40,13 +40,13 @@ where
     U: Decoder<Item = Packet, Error = ParseError>,
     U: Encoder<Item = Packet, Error = ParseError>,
 {
-    pub fn new(state: Arc<Shared>, transport: Framed<T, U>) -> Self {
+    pub fn new(transport: Framed<T, U>) -> Self {
         Self {
             client_id: bytestring::ByteString::new(),
             transport: transport,
             keep_alive: Duration::from_secs(60),
             rx: None,
-            state: state,
+            // state: state,
         }
     }
 
