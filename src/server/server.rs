@@ -1,11 +1,14 @@
 #![allow(non_snake_case)]
 #![allow(unused_imports)]
 #![allow(non_upper_case_globals)]
+#![allow(dead_code)]
 
 use crate::codec::mqtt::*;
+use crate::server::*;
 use bytes::Buf;
 use bytestring::ByteString;
 use coap::{IsMessage, Method, Server};
+use futures::join;
 use futures::{SinkExt, StreamExt};
 // use native_tls::Identity;
 use parking_lot::RwLock;
@@ -142,9 +145,6 @@ pub async fn serve_webapi<T: AsRef<str>>(laddr: T) -> Result<()> {
 //     }
 // }
 
-lazy_static! {
-    static ref state: Arc<Shared> = Arc::new(Shared::new());
-}
 pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
     use bytes::BufMut;
     use std::fmt::Write;
@@ -182,12 +182,10 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
                 socket.set_keepalive(Some(std::time::Duration::new(60, 0)))?;
                 tokio::spawn(async move {
                     //let stat = Arc::clone(&state);
-                    let mut peer = crate::peer::Peer::new(Framed::new(socket, MqttCodec::new()));
+                    let mut peer = Peer::new(Framed::new(socket, MqttCodec::new()));
                     peer.set_keep_alive(Duration::from_secs(60));
                     if let Ok(()) = peer
-                        .handshake(|p| {
-                            let (tx, rx) = mpsc::unbounded_channel();
-                            p.rx = Some(rx);
+                        .handshake(|p, tx| {
                             &state.add_peer(p.client_id.clone(), tx);
                         })
                         .await
@@ -221,6 +219,10 @@ pub struct Shared {
     peers: RwLock<HashMap<ByteString, Tx>>,
 }
 
+lazy_static! {
+    static ref state: Arc<Shared> = Arc::new(Shared::new());
+}
+
 impl Shared {
     fn new() -> Self {
         Shared {
@@ -233,17 +235,28 @@ impl Shared {
     }
     pub fn add_peer(&self, client_id: ByteString, tx: Tx) {
         self.peers.write().insert(client_id.clone(), tx);
-        // println!("add peer {} {}", client_id, self.peers.read().await.len());
     }
+
     pub fn remove_peer(&self, client_id: &ByteString) {
         if let Some(tx) = self.peers.write().remove(client_id) {
             drop(tx);
         }
-        // println!(
-        //     "remove peer {} {}",
-        //     client_id,
-        //     self.peers.read().await.len()
-        // );
+    }
+
+    pub async fn broadcast(&self, message: Publish) {
+        for peer in self.peers.read().iter() {
+            if let Err(e) = peer.1.send(message.clone()) {
+                println!("broadcast {} {}", peer.0, e);
+            }
+        }
+    }
+    pub async fn forward(&self, client_id: ByteString, message: Publish) -> Result<()> {
+        if let Some(tx) = self.peers.read().get(&client_id) {
+            if let Err(_e) = tx.send(message) {
+                return Err(Box::new(ParseError::InvalidClientId));
+            }
+        }
+        Ok(())
     }
     // pub async fn client_num(&self) -> usize {
     //     self.peers.read().await.len()

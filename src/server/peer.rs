@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 #![allow(unused_imports)]
 #![allow(non_upper_case_globals)]
+#![allow(dead_code)]
 
 use bytes::{Buf, Bytes};
 use bytestring::ByteString;
@@ -24,13 +25,18 @@ pub enum Message {
 
     /// MQTT协议报文
     Received(Packet),
+    KeepAlive,
 }
 
 pub struct Peer<T, U> {
-    pub client_id: ByteString,
     transport: Framed<T, U>,
-    keep_alive: Duration,
+    pub client_id: ByteString,
+    pub keep_alive: Duration,
+    pub clean_session: bool,
+    pub last_will: Option<LastWill>,
     pub rx: Option<Rx>,
+    pub tx: Option<Tx>,
+    from: bool,
     // state: Arc<Shared>,
 }
 
@@ -42,13 +48,36 @@ where
 {
     pub fn new(transport: Framed<T, U>) -> Self {
         Self {
-            client_id: bytestring::ByteString::new(),
             transport: transport,
+            client_id: bytestring::ByteString::new(),
             keep_alive: Duration::from_secs(60),
+            clean_session: false,
+            last_will: None,
             rx: None,
-            // state: state,
+            tx: None,
+            from: false,
         }
     }
+
+    pub fn from(client_id: ByteString, transport: Framed<T, U>) -> Self {
+        Self {
+            transport: transport,
+            client_id: client_id,
+            keep_alive: Duration::from_secs(60),
+            clean_session: false,
+            last_will: None,
+            rx: None,
+            tx: None,
+            from: true,
+        }
+    }
+
+    // pub async fn connect<F>(addr: &str, f: F) -> tokio::task::JoinHandle<Self>
+    // where
+    //     F: FnOnce(&mut Peer<T, U>),
+    //     F: Send + 'static,
+    // {
+    // }
 
     pub fn set_keep_alive(&mut self, keep_alive: Duration) {
         self.keep_alive = keep_alive
@@ -65,16 +94,35 @@ where
             }
             Ok(Some(Err(e))) => Err(e),
             Ok(None) => Ok(None),
-            Err(_) => Err(Box::new(ParseError::Timeout(self.keep_alive))),
+            Err(_) => {
+                if self.from {
+                    Ok(Some(Message::KeepAlive))
+                } else {
+                    Err(Box::new(ParseError::Timeout(self.keep_alive)))
+                }
+            }
         }
     }
 
     async fn send(&mut self, packet: Packet) -> Result<()> {
-        //println!("peer.send: {} {:#?}", self.client_id, packet);
+        // println!("peer.send: {} {:#?}", self.client_id, packet);
         if let Err(e) = self.transport.send(packet).await {
             return Err(Box::new(e));
         }
         Ok(())
+    }
+
+    async fn send_timeout(&mut self, packet: Packet, tm: Duration) -> Result<()> {
+        //println!("peer.send: {} {:#?}", self.client_id, packet);
+        if let Err(e) = timeout(tm, self.transport.send(packet)).await {
+            return Err(Box::new(e));
+        }
+        Ok(())
+    }
+
+    async fn send_connect(&mut self, connect: Connect, _tm: Duration) -> Result<()> {
+        let connect = Packet::Connect(connect);
+        self.send(connect).await
     }
     async fn send_disconnect(&mut self) -> Result<()> {
         let disconnect = Packet::Disconnect {};
@@ -96,10 +144,16 @@ where
         self.send(Packet::Publish(publish)).await
     }
 
+    async fn send_ping(&mut self) -> Result<()> {
+        let ping = Packet::PingRequest {};
+        self.send(ping).await
+    }
+
     async fn send_pong(&mut self) -> Result<()> {
         let pong = Packet::PingResponse {};
         self.send(pong).await
     }
+
     async fn send_publish_ack(&mut self, packet_id: u16) -> Result<()> {
         let ack = Packet::PublishAck {
             packet_id: packet_id,
@@ -141,10 +195,6 @@ where
     }
 
     pub async fn process(&mut self) -> Result<()> {
-        // self.handshake().await?;
-        // let (tx, rx) = mpsc::unbounded_channel();
-        // self.rx = Some(rx);
-        // self.state.add_peer(self.client_id.clone(), tx).await;
         loop {
             match self.receive().await {
                 Ok(Some(Message::Forward(publish))) => self.publish(publish).await?,
@@ -180,6 +230,9 @@ where
                 Ok(Some(Message::Received(Packet::Disconnect))) => {}
                 Ok(Some(Message::Received(Packet::PublishComplete { .. }))) => {}
                 Ok(Some(Message::Received(_))) => {}
+                Ok(Some(Message::KeepAlive)) => {
+                    self.send_ping().await?;
+                }
                 Ok(None) => return Ok(()),
                 Err(e) => return Err(e),
             }
@@ -188,8 +241,11 @@ where
 
     pub async fn handshake<F>(&mut self, f: F) -> Result<()>
     where
-        F: Fn(&mut Peer<T, U>),
+        F: Fn(&mut Peer<T, U>, Tx),
     {
+        let (tx, rx) = mpsc::unbounded_channel();
+        self.rx = Some(rx);
+        self.tx = Some(tx.clone());
         let ttl = Duration::from_secs(5);
         if let Ok(Some(Message::Received(Packet::Connect(connect)))) =
             self.receive_timeout(ttl).await
@@ -202,11 +258,69 @@ where
             self.client_id = connect.client_id;
             self.send_connect_ack(true, ConnectCode::ConnectionAccepted)
                 .await?;
-            f(self);
+            f(self, tx);
             Ok(())
         } else {
             Err(Box::new(ParseError::Timeout(ttl)))
         }
+    }
+
+    pub async fn connect<F>(
+        &mut self,
+        last_will: Option<LastWill>,
+        username: Option<ByteString>,
+        password: Option<Bytes>,
+        mut f: F,
+    ) -> Result<()>
+    where
+        F: FnMut(&mut Peer<T, U>, Tx),
+    {
+        let connect = Connect {
+            client_id: self.client_id.clone(),
+            protocol: Protocol::default(),
+            clean_session: self.clean_session,
+            keep_alive: self.keep_alive.as_secs() as u16,
+            last_will: last_will,
+            username: username,
+            password: password,
+        };
+        let ttl = Duration::from_secs(5);
+        self.send_connect(connect, ttl).await?;
+        match self.receive_timeout(ttl).await {
+            Ok(Some(Message::Received(Packet::ConnectAck {
+                session_present: _,
+                return_code,
+            }))) => {
+                if return_code == ConnectCode::ConnectionAccepted {
+                    let (tx, rx) = mpsc::unbounded_channel();
+                    self.rx = Some(rx);
+                    f(self, tx);
+                }
+                Ok(())
+            }
+            Ok(ret) => {
+                println!("{:#?}", ret);
+                Ok(())
+            }
+            Err(e) => {
+                println!("{}", e);
+                Err(e)
+            }
+        }
+        // if let Ok(Some(Message::Received(Packet::ConnectAck {
+        //     session_present: _,
+        //     return_code,
+        // }))) = self.receive_timeout(ttl).await
+        // {
+        //     if return_code == ConnectCode::ConnectionAccepted {
+        //         let (tx, rx) = mpsc::unbounded_channel();
+        //         self.rx = Some(rx);
+        //         f(self, tx);
+        //     }
+        //     Ok(())
+        // } else {
+        //     Err(Box::new(ParseError::Timeout(ttl)))
+        // }
     }
 }
 

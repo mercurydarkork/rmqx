@@ -9,11 +9,13 @@ extern crate serde;
 extern crate serde_json;
 
 mod codec;
+mod peer;
+mod router;
 mod server;
 mod webhook;
 
-use crate::server::*;
 use futures::join;
+use server::*;
 use std::*;
 
 #[tokio::main]
