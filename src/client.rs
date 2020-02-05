@@ -24,6 +24,7 @@ use tokio::net::TcpStream;
 use tokio::time::delay_for;
 use tokio::time::Duration;
 use tokio_util::codec::Framed;
+use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -32,12 +33,13 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|| "127.0.0.1:6315".to_string());
     let n = std::env::args().nth(2).unwrap_or_else(|| "1".to_string());
     let n = n.parse().unwrap();
-    for i in 1..n {
+    for i in 1..=n {
         let addr = addr.to_owned();
+        let client_id = format!("{}-{}", i, Uuid::new_v4());
         tokio::spawn(async move {
             let _ = Client::connect(
                 &addr,
-                ByteString::from(i.to_string()),
+                ByteString::from(client_id),
                 None,
                 Some(ByteString::from("username")),
                 Some(Bytes::from("password")),
