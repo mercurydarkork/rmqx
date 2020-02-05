@@ -8,13 +8,13 @@ use bytestring::ByteString;
 use coap::{IsMessage, Method, Server};
 use futures::{SinkExt, StreamExt};
 // use native_tls::Identity;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::RwLock;
 use tokio::fs;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpListener;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tokio::time::Duration;
 use tokio_util::codec::Framed;
 

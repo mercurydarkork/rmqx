@@ -28,6 +28,7 @@ uuid = { version = "0.8", features = ["v4"] }
 coap = "0.8"
 hyper = "0.13"
 lazy_static="1.4"
+parking_lot="0.10"
 
 [profile.release]
 debug = true
