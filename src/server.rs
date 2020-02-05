@@ -10,10 +10,11 @@ use futures::{SinkExt, StreamExt};
 // use native_tls::Identity;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::RwLock;
 use tokio::fs;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpListener;
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{mpsc, Mutex};
 use tokio::time::Duration;
 use tokio_util::codec::Framed;
 
@@ -59,8 +60,11 @@ pub async fn serve_webapi<T: AsRef<str>>(laddr: T) -> Result<()> {
     }
 
     async fn state_clients() -> Result<Response<Body>> {
+        // let data = json!({
+        //     "clients":&state.client_num().await,
+        // });
         let data = json!({
-            "clients":&state.client_num().await,
+            "clients":&state.client_num(),
         });
         let res = match serde_json::to_string(&data) {
             Ok(json) => Response::builder()
@@ -176,21 +180,30 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
             Ok((socket, addr)) => {
                 socket.set_nodelay(true)?;
                 socket.set_keepalive(Some(std::time::Duration::new(60, 0)))?;
-                // socket.set_recv_buffer_size(4096)?;
-                // socket.set_send_buffer_size(4096)?;
                 tokio::spawn(async move {
                     let stat = Arc::clone(&state);
                     let mut peer =
                         crate::peer::Peer::new(stat, Framed::new(socket, MqttCodec::new()));
-                    peer.set_ttl(Duration::from_secs(60));
-                    if let Err(e) = peer.process().await {
-                        println!(
-                            "failed to process connection {} {}; error = {}",
-                            peer.client_id, addr, e
-                        );
+                    peer.set_keep_alive(Duration::from_secs(60));
+                    if let Ok(()) = peer
+                        .handshake(|p| {
+                            let (tx, rx) = mpsc::unbounded_channel();
+                            p.rx = Some(rx);
+                            &state.add_peer(p.client_id.clone(), tx);
+                        })
+                        .await
+                    {
+                        if let Err(e) = peer.process().await {
+                            println!(
+                                "failed to process connection {} {}; error = {}",
+                                peer.client_id, addr, e
+                            );
+                        }
+                        &state.remove_peer(&peer.client_id);
                     }
+                    // self.state.addPeer(self.client_id.clone(), tx).await;
                     //println!("connection {} closed", addr);
-                    &state.removePeer(&peer.client_id).await;
+                    // &state.remove_peer(&peer.client_id).await;
                     drop(peer)
                 });
             }
@@ -216,15 +229,15 @@ impl Shared {
         }
     }
 
-    pub async fn client_num(&self) -> usize {
-        self.peers.read().await.len()
+    pub fn client_num(&self) -> usize {
+        self.peers.read().unwrap().len()
     }
-    pub async fn addPeer(&self, client_id: ByteString, tx: Tx) {
-        self.peers.write().await.insert(client_id.clone(), tx);
+    pub fn add_peer(&self, client_id: ByteString, tx: Tx) {
+        self.peers.write().unwrap().insert(client_id.clone(), tx);
         // println!("add peer {} {}", client_id, self.peers.read().await.len());
     }
-    pub async fn removePeer(&self, client_id: &ByteString) {
-        if let Some(tx) = self.peers.write().await.remove(client_id) {
+    pub fn remove_peer(&self, client_id: &ByteString) {
+        if let Some(tx) = self.peers.write().unwrap().remove(client_id) {
             drop(tx);
         }
         // println!(
@@ -233,20 +246,37 @@ impl Shared {
         //     self.peers.read().await.len()
         // );
     }
-    pub async fn broadcast(&self, message: Publish) {
-        println!("broadcast {}", self.client_num().await);
-        for peer in self.peers.read().await.iter() {
-            if let Err(e) = peer.1.send(message.clone()) {
-                println!("broadcast {} {}", peer.0, e);
-            }
-        }
-    }
-    pub async fn forward(&self, client_id: ByteString, message: Publish) -> Result<()> {
-        if let Some(tx) = self.peers.read().await.get(&client_id) {
-            if let Err(_e) = tx.send(message.clone()) {
-                return Err(Box::new(ParseError::InvalidClientId));
-            }
-        }
-        Ok(())
-    }
+    // pub async fn client_num(&self) -> usize {
+    //     self.peers.read().await.len()
+    // }
+    // pub async fn add_peer(&self, client_id: ByteString, tx: Tx) {
+    //     self.peers.write().await.insert(client_id.clone(), tx);
+    //     // println!("add peer {} {}", client_id, self.peers.read().await.len());
+    // }
+    // pub async fn remove_peer(&self, client_id: &ByteString) {
+    //     if let Some(tx) = self.peers.write().await.remove(client_id) {
+    //         drop(tx);
+    //     }
+    //     // println!(
+    //     //     "remove peer {} {}",
+    //     //     client_id,
+    //     //     self.peers.read().await.len()
+    //     // );
+    // }
+    // pub async fn broadcast(&self, message: Publish) {
+    //     println!("broadcast {}", self.client_num().await);
+    //     for peer in self.peers.read().await.iter() {
+    //         if let Err(e) = peer.1.send(message.clone()) {
+    //             println!("broadcast {} {}", peer.0, e);
+    //         }
+    //     }
+    // }
+    // pub async fn forward(&self, client_id: ByteString, message: Publish) -> Result<()> {
+    //     if let Some(tx) = self.peers.read().await.get(&client_id) {
+    //         if let Err(_e) = tx.send(message.clone()) {
+    //             return Err(Box::new(ParseError::InvalidClientId));
+    //         }
+    //     }
+    //     Ok(())
+    // }
 }

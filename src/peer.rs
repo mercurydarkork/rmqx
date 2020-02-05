@@ -29,8 +29,8 @@ pub enum Message {
 pub struct Peer<T, U> {
     pub client_id: ByteString,
     transport: Framed<T, U>,
-    ttl: Duration,
-    rx: Option<Rx>,
+    keep_alive: Duration,
+    pub rx: Option<Rx>,
     state: Arc<Shared>,
 }
 
@@ -44,18 +44,18 @@ where
         Self {
             client_id: bytestring::ByteString::new(),
             transport: transport,
-            ttl: Duration::from_secs(60),
+            keep_alive: Duration::from_secs(60),
             rx: None,
             state: state,
         }
     }
 
-    pub fn set_ttl(&mut self, ttl: Duration) {
-        self.ttl = ttl
+    pub fn set_keep_alive(&mut self, keep_alive: Duration) {
+        self.keep_alive = keep_alive
     }
 
     async fn receive(&mut self) -> Result<Option<Message>> {
-        self.receive_timeout(self.ttl).await
+        self.receive_timeout(self.keep_alive).await
     }
     async fn receive_timeout(&mut self, tm: Duration) -> Result<Option<Message>> {
         match timeout(tm, self.next()).await {
@@ -65,7 +65,7 @@ where
             }
             Ok(Some(Err(e))) => Err(e),
             Ok(None) => Ok(None),
-            Err(_) => Err(Box::new(ParseError::Timeout(self.ttl))),
+            Err(_) => Err(Box::new(ParseError::Timeout(self.keep_alive))),
         }
     }
 
@@ -92,7 +92,7 @@ where
         self.send(ack).await
     }
 
-    async fn publish(&mut self, publish: Publish) -> Result<()> {
+    pub async fn publish(&mut self, publish: Publish) -> Result<()> {
         self.send(Packet::Publish(publish)).await
     }
 
@@ -141,10 +141,10 @@ where
     }
 
     pub async fn process(&mut self) -> Result<()> {
-        self.handshake().await?;
-        let (tx, rx) = mpsc::unbounded_channel();
-        self.rx = Some(rx);
-        self.state.addPeer(self.client_id.clone(), tx).await;
+        // self.handshake().await?;
+        // let (tx, rx) = mpsc::unbounded_channel();
+        // self.rx = Some(rx);
+        // self.state.add_peer(self.client_id.clone(), tx).await;
         loop {
             match self.receive().await {
                 Ok(Some(Message::Forward(publish))) => self.publish(publish).await?,
@@ -186,7 +186,10 @@ where
         }
     }
 
-    pub async fn handshake(&mut self) -> Result<()> {
+    pub async fn handshake<F>(&mut self, f: F) -> Result<()>
+    where
+        F: Fn(&mut Peer<T, U>),
+    {
         let ttl = Duration::from_secs(5);
         if let Ok(Some(Message::Received(Packet::Connect(connect)))) =
             self.receive_timeout(ttl).await
@@ -198,7 +201,9 @@ where
             }
             self.client_id = connect.client_id;
             self.send_connect_ack(true, ConnectCode::ConnectionAccepted)
-                .await
+                .await?;
+            f(self);
+            Ok(())
         } else {
             Err(Box::new(ParseError::Timeout(ttl)))
         }
