@@ -229,14 +229,14 @@ impl Shared {
     }
 
     pub fn client_num(&self) -> usize {
-        self.peers.read().unwrap().len()
+        self.peers.read().len()
     }
     pub fn add_peer(&self, client_id: ByteString, tx: Tx) {
-        self.peers.write().unwrap().insert(client_id.clone(), tx);
+        self.peers.write().insert(client_id.clone(), tx);
         // println!("add peer {} {}", client_id, self.peers.read().await.len());
     }
     pub fn remove_peer(&self, client_id: &ByteString) {
-        if let Some(tx) = self.peers.write().unwrap().remove(client_id) {
+        if let Some(tx) = self.peers.write().remove(client_id) {
             drop(tx);
         }
         // println!(
