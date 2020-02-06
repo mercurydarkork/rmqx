@@ -38,7 +38,7 @@ pub struct Options {
     pub listener: Listener,
     pub limiter: Limiter,
     pub authentication: Authentication,
-    pub webhook: Webhook,
+    pub webhook: Option<Webhook>,
 }
 
 impl Options {
