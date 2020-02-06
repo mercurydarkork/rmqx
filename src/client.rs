@@ -10,8 +10,11 @@ extern crate lazy_static;
 extern crate serde;
 #[macro_use]
 extern crate serde_json;
+#[macro_use]
+extern crate serde_derive;
 
 mod codec;
+mod options;
 mod server;
 mod webhook;
 
@@ -30,7 +33,7 @@ use uuid::Uuid;
 async fn main() -> Result<()> {
     let addr = std::env::args()
         .nth(1)
-        .unwrap_or_else(|| "127.0.0.1:6315".to_string());
+        .unwrap_or_else(|| "127.0.0.1:1883".to_string());
     let n = std::env::args().nth(2).unwrap_or_else(|| "1".to_string());
     let n = n.parse().unwrap();
     for i in 1..=n {

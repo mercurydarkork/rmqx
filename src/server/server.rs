@@ -8,6 +8,7 @@ use crate::server::*;
 use bytes::Buf;
 use bytestring::ByteString;
 use coap::{IsMessage, Method, Server};
+//use futures::channel::mpsc;
 use futures::join;
 use futures::{SinkExt, StreamExt};
 // use native_tls::Identity;
@@ -23,7 +24,7 @@ use tokio_util::codec::Framed;
 
 pub async fn serve_coap<T: AsRef<str>>(laddr: T) -> Result<()> {
     let mut server = Server::new(laddr.as_ref())?;
-    println!("listening coap.udp on {}", laddr.as_ref());
+    println!("coap listen on {}", laddr.as_ref());
     server
         .run(move |request| {
             match request.get_method() {
@@ -92,20 +93,20 @@ pub async fn serve_webapi<T: AsRef<str>>(laddr: T) -> Result<()> {
     }
     let make_service = make_service_fn(|_conn| async { Ok::<_, Error>(service_fn(handle)) });
     let server = Server::bind(&laddr).serve(make_service);
-    println!("listening argonx.webapi on {}", laddr);
+    println!("webapi listen on {}", laddr);
     if let Err(e) = server.await {
         eprintln!("server error: {}", e);
     }
     Ok(())
 }
 
-// pub async fn serve_ws<T: AsRef<str>>(_laddr: T) -> Result<()> {
-//     Ok(())
-// }
+pub async fn serve_ws<T: AsRef<str>>(_laddr: T) -> Result<()> {
+    Ok(())
+}
 
-// pub async fn serve_wss<T: AsRef<str>>(_laddr: T) -> Result<()> {
-//     Ok(())
-// }
+pub async fn serve_wss<T: AsRef<str>>(_laddr: T, _p12: T, _passwd: T) -> Result<()> {
+    Ok(())
+}
 
 // pub async fn serve_tls<T: AsRef<str>, U: AsRef<std::path::Path>, W: AsRef<str>>(
 //     laddr: T,
@@ -149,39 +150,14 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
     use bytes::BufMut;
     use std::fmt::Write;
     use tokio::time::delay_for;
-    // tokio::spawn(async move {
-    //     let mut packet_id = 0u16;
-    //     let stat = Arc::clone(&state);
-    //     loop {
-    //         let mut paylaod = bytes::BytesMut::from("broadcast ");
-    //         paylaod.write_str(&packet_id.to_string()).unwrap();
-    //         let _res = stat
-    //             .broadcast(Publish {
-    //                 dup: false,
-    //                 retain: false,
-    //                 qos: QoS::AtLeastOnce,
-    //                 topic: ByteString::from("$sys/broadcast"),
-    //                 packet_id: Some(packet_id),
-    //                 payload: paylaod.to_bytes(),
-    //             })
-    //             .await;
-    //         if u16::max_value() == packet_id {
-    //             packet_id = 0;
-    //         } else {
-    //             packet_id += 1;
-    //         }
-    //         delay_for(Duration::from_millis(5000)).await;
-    //     }
-    // });
     let mut listener = TcpListener::bind(laddr.as_ref()).await?;
-    println!("listening mqtt.tcp on {}", laddr.as_ref());
+    println!("mqtt listen on {}", laddr.as_ref());
     loop {
         match listener.accept().await {
             Ok((socket, addr)) => {
                 socket.set_nodelay(true)?;
                 socket.set_keepalive(Some(std::time::Duration::new(60, 0)))?;
                 tokio::spawn(async move {
-                    //let stat = Arc::clone(&state);
                     let mut peer = Peer::new(Framed::new(socket, MqttCodec::new()));
                     peer.set_keep_alive(Duration::from_secs(60));
                     if let Ok(()) = peer
@@ -190,7 +166,7 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
                         })
                         .await
                     {
-                        if let Err(e) = peer.process().await {
+                        if let Err(e) = peer.process_loop().await {
                             println!(
                                 "failed to process connection {} {}; error = {}",
                                 peer.client_id, addr, e
@@ -198,9 +174,6 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
                         }
                         &state.remove_peer(&peer.client_id);
                     }
-                    // self.state.addPeer(self.client_id.clone(), tx).await;
-                    //println!("connection {} closed", addr);
-                    // &state.remove_peer(&peer.client_id).await;
                     drop(peer)
                 });
             }

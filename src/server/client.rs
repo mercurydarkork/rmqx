@@ -28,7 +28,7 @@ impl Client {
                 peer.connect(last_will, username, password, |_p, tx| c.tx = Some(tx))
                     .await?;
                 tokio::spawn(async move {
-                    if let Err(e) = peer.process().await {
+                    if let Err(e) = peer.process_loop().await {
                         println!(
                             "failed to process connection {}; error = {}",
                             peer.client_id, e

@@ -4,120 +4,56 @@ extern crate bitflags;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
-extern crate serde;
-#[macro_use]
 extern crate serde_json;
+#[macro_use]
+extern crate serde_derive;
 
 mod codec;
+mod options;
 mod server;
 mod webhook;
 
 use crate::server::*;
 use futures::join;
+use options::Options;
 use std::*;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let laddr = "0.0.0.0:6315".to_owned();
-    // let laddr2 = "0.0.0.0:8883".to_owned();
-    // let laddr3 = "0.0.0.0:80".to_owned();
-    // let laddr4 = "0.0.0.0:443".to_owned();
-    let laddr5 = "0.0.0.0:5555".to_owned();
-    let laddr6 = "0.0.0.0:5683".to_owned();
+    let options = Options::new().unwrap();
     let run = async move {
         let coap = async {
-            if let Err(err) = serve_coap(&laddr6).await {
-                println!("listening coap.udp on {}, {}", laddr6, err);
+            if let Some(laddr) = &options.listener.coap_laddr {
+                if let Err(err) = serve_coap(&laddr).await {
+                    println!("error: coap listen on {}, {}", &laddr, err);
+                }
             }
         };
-        let task = async {
-            if let Err(err) = serve(&laddr).await {
-                println!("listening mqtt.tcp on {}, {}", laddr, err);
+        let mqtt = async {
+            if let Err(err) = serve(&options.listener.mqtt_laddr).await {
+                println!(
+                    "error: mqtt listen on {}, {}",
+                    &options.listener.mqtt_laddr, err
+                );
             }
         };
-        // let task2 = async {
-        //     if let Err(err) = serve_tls(&laddr2, "server.p12", "111111").await {
-        //         println!("listening mqtt.tls on {}, {}", laddr2, err);
-        //     }
-        // };
-        // let ws = async {
-        //     if let Err(err) = serve_ws(&laddr3).await {
-        //         println!("listening mqtt.ws on {}, {}", laddr3, err);
-        //     }
-        // };
-        // let wss = async {
-        //     if let Err(err) = serve_wss(&laddr4).await {
-        //         println!("listening mqtt.wss on {}, {}", laddr4, err);
-        //     }
-        // };
+        let mqtt_ws = async {
+            if let Some(laddr) = &options.listener.mqtt_ws_laddr {
+                if let Err(err) = serve_ws(&laddr).await {
+                    println!("error: mqtt.ws listen on {}, {}", &laddr, err);
+                }
+            }
+        };
         let wapi = async {
-            if let Err(err) = serve_webapi(&laddr5).await {
-                println!("listening webapi on {}, {}", laddr5, err);
+            if let Err(err) = serve_webapi(&options.listener.webapi_laddr).await {
+                println!(
+                    "error: webapi listen on {}, {}",
+                    &options.listener.webapi_laddr, err
+                );
             }
         };
-        let _ = join!(coap, task, wapi);
+        let _ = join!(mqtt, wapi, mqtt_ws, coap);
     };
     run.await;
     Ok(())
-}
-
-fn main1() {
-    // let laddr = env::args()
-    //     .nth(1)
-    //     .unwrap_or_else(|| "0.0.0.0:1883".to_string());
-    let laddr = "0.0.0.0:6315".to_owned();
-    //let laddr2 = "0.0.0.0:8883".to_owned();
-    //let laddr3 = "0.0.0.0:80".to_owned();
-    //let laddr4 = "0.0.0.0:443".to_owned();
-    let laddr5 = "0.0.0.0:5555".to_owned();
-    let laddr6 = "0.0.0.0:5683".to_owned();
-    // std::thread::spawn(move || {
-    //     Builder::new()
-    //         .basic_scheduler()
-    //         .build()
-    //         .unwrap()
-    //         .block_on(async move {
-    //             println!("basic_scheduler");
-    //         });
-    // });
-    // Builder::new()
-    //     .threaded_scheduler()
-    //     .enable_all()
-    //     .build()
-    //     .unwrap()
-    tokio::runtime::Runtime::new()
-        .unwrap()
-        .block_on(async move {
-            let coap = async {
-                if let Err(err) = serve_coap(&laddr6).await {
-                    println!("listening coap.udp on {}, {}", laddr6, err);
-                }
-            };
-            let task = async {
-                if let Err(err) = serve(&laddr).await {
-                    println!("listening mqtt.tcp on {}, {}", laddr, err);
-                }
-            };
-            // let task2 = async {
-            //     if let Err(err) = serve_tls(&laddr2, "server.p12", "111111").await {
-            //         println!("listening mqtt.tls on {}, {}", laddr2, err);
-            //     }
-            // };
-            // let ws = async {
-            //     if let Err(err) = serve_ws(&laddr3).await {
-            //         println!("listening mqtt.ws on {}, {}", laddr3, err);
-            //     }
-            // };
-            // let wss = async {
-            //     if let Err(err) = serve_wss(&laddr4).await {
-            //         println!("listening mqtt.wss on {}, {}", laddr4, err);
-            //     }
-            // };
-            let wapi = async {
-                if let Err(err) = serve_webapi(&laddr5).await {
-                    println!("listening webapi on {}, {}", laddr5, err);
-                }
-            };
-            let _ret = join!(coap, task, wapi);
-        });
 }

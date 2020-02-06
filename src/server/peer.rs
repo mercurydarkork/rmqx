@@ -194,7 +194,7 @@ where
         self.send(ack).await
     }
 
-    pub async fn process(&mut self) -> Result<()> {
+    pub async fn process_loop(&mut self) -> Result<()> {
         loop {
             match self.receive().await {
                 Ok(Some(Message::Forward(publish))) => self.publish(publish).await?,
@@ -307,20 +307,6 @@ where
                 Err(e)
             }
         }
-        // if let Ok(Some(Message::Received(Packet::ConnectAck {
-        //     session_present: _,
-        //     return_code,
-        // }))) = self.receive_timeout(ttl).await
-        // {
-        //     if return_code == ConnectCode::ConnectionAccepted {
-        //         let (tx, rx) = mpsc::unbounded_channel();
-        //         self.rx = Some(rx);
-        //         f(self, tx);
-        //     }
-        //     Ok(())
-        // } else {
-        //     Err(Box::new(ParseError::Timeout(ttl)))
-        // }
     }
 }
 

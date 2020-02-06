@@ -36,6 +36,8 @@ coap = "0.8"
 hyper = "0.13"
 lazy_static="1.4"
 parking_lot="0.10"
+config = "0.10"
+serde_derive = "1.0"
 
 [profile.release]
 debug = true
