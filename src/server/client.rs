@@ -26,25 +26,30 @@ impl Client {
                 let mut peer = Peer::from(client_id.clone(), codec);
                 peer.set_keep_alive(Duration::from_secs(30));
                 let mut c = Client { tx: None };
-                peer.connect(last_will, username, password, |_p, tx| c.tx = Some(tx))
-                    .await?;
-                tokio::spawn(async move {
-                    loop {
-                        if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await {
-                            println!(
-                                "failed to process connection {}; error = {}",
-                                peer.client_id, e
-                            );
+                if let Ok(_) = peer
+                    .connect(
+                        last_will.clone(),
+                        username.clone(),
+                        password.clone(),
+                        |_p, tx| c.tx = Some(tx),
+                    )
+                    .await
+                {
+                    tokio::spawn(async move {
+                        loop {
+                            if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await {
+                                println!(
+                                    "failed to process connection {}; error = {}",
+                                    peer.client_id, e
+                                );
+                            }
+                            delay_for(Duration::from_secs(5)).await;
                         }
-                        delay_for(Duration::from_secs(5)).await;
-                    }
-                });
-                return Ok(c);
+                    });
+                    return Ok(c);
+                }
             }
-            println!("connect timeout {}s", tm.as_secs());
-            // } else {
-            //     Err(Box::new(ParseError::Timeout(tm)))
-            // }
+            println!("reconnect");
         }
     }
 
