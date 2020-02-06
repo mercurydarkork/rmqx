@@ -3,6 +3,7 @@ use crate::server::*;
 use bytes::Bytes;
 use bytestring::ByteString;
 use tokio::net::TcpStream;
+use tokio::time::delay_for;
 use tokio::time::{timeout, Duration};
 use tokio_util::codec::Framed;
 
@@ -28,11 +29,14 @@ impl Client {
                 peer.connect(last_will, username, password, |_p, tx| c.tx = Some(tx))
                     .await?;
                 tokio::spawn(async move {
-                    if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await {
-                        println!(
-                            "failed to process connection {}; error = {}",
-                            peer.client_id, e
-                        );
+                    loop {
+                        if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await {
+                            println!(
+                                "failed to process connection {}; error = {}",
+                                peer.client_id, e
+                            );
+                        }
+                        delay_for(Duration::from_secs(5)).await;
                     }
                 });
                 return Ok(c);
