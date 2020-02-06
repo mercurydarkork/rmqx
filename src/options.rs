@@ -1,6 +1,6 @@
 use config::{Config, ConfigError, Environment, File};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Listener {
     pub mqtt_laddr: String,
     pub mqtt_tls_laddr: Option<String>,
@@ -11,34 +11,34 @@ pub struct Listener {
     pub p12_file: Option<String>,
     pub p12_passwd: Option<String>,
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Limiter {
     pub max_conns: u32,           //最大连接数
     pub max_conn_pre_second: u32, //每秒连接速率
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Authentication {
-    pub method: String, //anonymous｜host｜file｜webhook
+    pub method: String, //anonymous｜webhook
     pub file_path: Option<String>,
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Webhook {
-    pub on_connect: String,
-    pub on_disconnect: String,
-    pub on_subscribe: String,
-    pub on_unsubscribe: String,
-    pub on_publish: String,
-    pub on_publish_ack: String,
-    pub on_publish_release: String,
-    pub on_publish_complete: String,
+    pub on_connect: Option<String>,
+    pub on_disconnect: Option<String>,
+    pub on_subscribe: Option<String>,
+    pub on_unsubscribe: Option<String>,
+    pub on_publish: Option<String>,
+    pub on_delivered: Option<String>,
+    pub on_deliver_timeout: Option<String>,
+    pub on_kick: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Options {
     pub listener: Listener,
     pub limiter: Limiter,
     pub authentication: Authentication,
-    pub webhook: Option<Webhook>,
+    pub webhook: Webhook,
 }
 
 impl Options {

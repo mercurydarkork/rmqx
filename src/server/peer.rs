@@ -18,16 +18,6 @@ use tokio_util::codec::{Decoder, Encoder, Framed};
 use crate::codec::mqtt::*;
 use crate::server::*;
 
-#[derive(Debug)]
-pub enum Message {
-    /// 转发Publish消息
-    Forward(Publish),
-
-    /// MQTT协议报文
-    Received(Packet),
-    KeepAlive,
-}
-
 pub struct Peer<T, U> {
     transport: Framed<T, U>,
     pub client_id: ByteString,
@@ -194,45 +184,73 @@ where
         self.send(ack).await
     }
 
-    pub async fn process_loop(&mut self) -> Result<()> {
+    pub async fn process_loop<F>(&mut self, f: F) -> Result<()>
+    where
+        F: Fn(&Packet) -> bool,
+    {
         loop {
             match self.receive().await {
                 Ok(Some(Message::Forward(publish))) => self.publish(publish).await?,
-                Ok(Some(Message::Received(Packet::PingRequest))) => self.send_pong().await?,
-                Ok(Some(Message::Received(Packet::Connect(_)))) => {
+                Ok(Some(Message::Mqtt(Packet::PingRequest))) => self.send_pong().await?,
+                Ok(Some(Message::Mqtt(Packet::Connect(_)))) => {
                     self.send_connect_ack(false, ConnectCode::NotAuthorized)
                         .await?;
-                    self.send_disconnect().await?
+                    self.send_disconnect().await?;
+                    //todo 处理异常数据包
+                    return Ok(());
                 }
-                Ok(Some(Message::Received(Packet::Publish(publish)))) => {
+                Ok(Some(Message::Mqtt(Packet::Publish(publish)))) => {
                     if publish.qos == QoS::AtLeastOnce {
                         self.send_publish_ack(publish.packet_id.unwrap()).await?;
+                        f(&Packet::Publish(publish));
                     } else if publish.qos == QoS::ExactlyOnce {
                         self.send_publish_received(publish.packet_id.unwrap())
                             .await?;
                     }
                 }
-                Ok(Some(Message::Received(Packet::PublishRelease { packet_id }))) => {
-                    self.send_publish_complete(packet_id).await?
+                Ok(Some(Message::Mqtt(Packet::PublishRelease { packet_id }))) => {
+                    self.send_publish_complete(packet_id).await?;
+                    f(&Packet::PublishRelease { packet_id });
                 }
-                Ok(Some(Message::Received(Packet::PublishReceived { packet_id }))) => {
-                    self.send_publish_release(packet_id).await?
+                Ok(Some(Message::Mqtt(Packet::PublishReceived { packet_id }))) => {
+                    self.send_publish_release(packet_id).await?;
                 }
-                Ok(Some(Message::Received(Packet::Subscribe {
+                Ok(Some(Message::Mqtt(Packet::Subscribe {
                     packet_id,
-                    topic_filters: _,
-                }))) => self.send_subscribe_ack(packet_id).await?,
-                Ok(Some(Message::Received(Packet::Unsubscribe {
+                    topic_filters,
+                }))) => {
+                    if f(&Packet::Subscribe {
+                        packet_id,
+                        topic_filters,
+                    }) {
+                        self.send_subscribe_ack(packet_id).await?;
+                    }
+                    //todo 订阅失败处理
+                }
+                Ok(Some(Message::Mqtt(Packet::Unsubscribe {
                     packet_id,
-                    topic_filters: _,
-                }))) => self.send_unsubscribe_ack(packet_id).await?,
-                Ok(Some(Message::Received(Packet::PublishAck { .. }))) => {}
-                Ok(Some(Message::Received(Packet::Disconnect))) => {}
-                Ok(Some(Message::Received(Packet::PublishComplete { .. }))) => {}
-                Ok(Some(Message::Received(_))) => {}
+                    topic_filters,
+                }))) => {
+                    self.send_unsubscribe_ack(packet_id).await?;
+                    f(&Packet::Unsubscribe {
+                        packet_id,
+                        topic_filters,
+                    });
+                }
+                Ok(Some(Message::Mqtt(Packet::PublishAck { packet_id }))) => {
+                    f(&Packet::PublishAck { packet_id });
+                }
+                Ok(Some(Message::Mqtt(Packet::Disconnect))) => {
+                    f(&Packet::Disconnect);
+                }
+                Ok(Some(Message::Mqtt(Packet::PublishComplete { packet_id }))) => {
+                    f(&Packet::PublishComplete { packet_id });
+                }
+                Ok(Some(Message::Mqtt(_))) => {}
                 Ok(Some(Message::KeepAlive)) => {
                     self.send_ping().await?;
                 }
+                Ok(Some(Message::Kick)) => return Ok(()), //被踢掉了
                 Ok(None) => return Ok(()),
                 Err(e) => return Err(e),
             }
@@ -241,24 +259,23 @@ where
 
     pub async fn handshake<F>(&mut self, f: F) -> Result<()>
     where
-        F: Fn(&mut Peer<T, U>, Tx),
+        F: Fn(&Connect, Tx) -> bool,
     {
-        let (tx, rx) = mpsc::unbounded_channel();
-        self.rx = Some(rx);
-        self.tx = Some(tx.clone());
         let ttl = Duration::from_secs(5);
-        if let Ok(Some(Message::Received(Packet::Connect(connect)))) =
-            self.receive_timeout(ttl).await
-        {
+        if let Ok(Some(Message::Mqtt(Packet::Connect(connect)))) = self.receive_timeout(ttl).await {
             if connect.protocol.level() != 4 {
                 self.send_connect_ack(false, ConnectCode::UnacceptableProtocolVersion)
                     .await?;
                 return Err(Box::new(ParseError::UnsupportedProtocolLevel));
             }
-            self.client_id = connect.client_id;
-            self.send_connect_ack(true, ConnectCode::ConnectionAccepted)
-                .await?;
-            f(self, tx);
+            let (tx, rx) = mpsc::unbounded_channel();
+            if f(&connect, tx.clone()) {
+                self.client_id = connect.client_id.clone();
+                self.rx = Some(rx);
+                self.tx = Some(tx);
+                self.send_connect_ack(true, ConnectCode::ConnectionAccepted)
+                    .await?;
+            }
             Ok(())
         } else {
             Err(Box::new(ParseError::Timeout(ttl)))
@@ -287,7 +304,7 @@ where
         let ttl = Duration::from_secs(5);
         self.send_connect(connect, ttl).await?;
         match self.receive_timeout(ttl).await {
-            Ok(Some(Message::Received(Packet::ConnectAck {
+            Ok(Some(Message::Mqtt(Packet::ConnectAck {
                 session_present: _,
                 return_code,
             }))) => {
@@ -318,13 +335,13 @@ where
     type Item = Result<Message>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if let Some(rx) = &mut self.rx {
-            if let Poll::Ready(Some(v)) = Pin::new(rx).poll_next(cx) {
-                return Poll::Ready(Some(Ok(Message::Forward(v))));
+            if let Poll::Ready(Some(msg)) = Pin::new(rx).poll_next(cx) {
+                return Poll::Ready(Some(Ok(msg)));
             }
         }
         let result: Option<_> = futures::ready!(Pin::new(&mut self.transport).poll_next(cx));
         Poll::Ready(match result {
-            Some(Ok(msg)) => Some(Ok(Message::Received(msg))),
+            Some(Ok(msg)) => Some(Ok(Message::Mqtt(msg))),
             Some(Err(err)) => Some(Err(Box::new(err))),
             None => None,
         })

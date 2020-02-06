@@ -15,7 +15,7 @@ path = "src/client.rs"
 
 [dependencies]
 futures = "0.3"
-#reqwest = { version = "0.10", features = ["json"] }
+reqwest = { version = "0.10", features = ["json"] }
 #native-tls = "0.2"
 tokio = {version = "0.2", features = ["full"]}
 tokio-util = {version = "0.2", features = ["full"]}
@@ -38,6 +38,7 @@ lazy_static="1.4"
 parking_lot="0.10"
 config = "0.10"
 serde_derive = "1.0"
+chrono = "0.4"
 
 [profile.release]
 debug = true

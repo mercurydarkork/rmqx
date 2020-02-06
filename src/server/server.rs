@@ -161,12 +161,16 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
                     let mut peer = Peer::new(Framed::new(socket, MqttCodec::new()));
                     peer.set_keep_alive(Duration::from_secs(60));
                     if let Ok(()) = peer
-                        .handshake(|p, tx| {
-                            &state.add_peer(p.client_id.clone(), tx);
+                        .handshake(|conn, tx| -> bool {
+                            if *&state.exist(&conn.client_id) {
+                                &state.kick(&conn.client_id);
+                            }
+                            &state.add_peer(conn.client_id.clone(), tx);
+                            true
                         })
                         .await
                     {
-                        if let Err(e) = peer.process_loop().await {
+                        if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await {
                             println!(
                                 "failed to process connection {} {}; error = {}",
                                 peer.client_id, addr, e
@@ -184,9 +188,20 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub type Tx = mpsc::UnboundedSender<Publish>;
+#[derive(Debug)]
+pub enum Message {
+    /// 转发Publish消息
+    Forward(Publish),
 
-pub type Rx = mpsc::UnboundedReceiver<Publish>;
+    /// MQTT协议报文
+    Mqtt(Packet),
+    KeepAlive,
+    Kick,
+}
+
+pub type Tx = mpsc::UnboundedSender<Message>;
+
+pub type Rx = mpsc::UnboundedReceiver<Message>;
 
 pub struct Shared {
     peers: RwLock<HashMap<ByteString, Tx>>,
@@ -206,6 +221,18 @@ impl Shared {
     pub fn client_num(&self) -> usize {
         self.peers.read().len()
     }
+
+    pub fn exist(&self, client_id: &ByteString) -> bool {
+        self.peers.read().contains_key(client_id)
+    }
+
+    pub fn kick(&self, client_id: &ByteString) {
+        if let Some(tx) = self.peers.write().remove(client_id) {
+            let _ = tx.send(Message::Kick);
+            drop(tx);
+        }
+    }
+
     pub fn add_peer(&self, client_id: ByteString, tx: Tx) {
         self.peers.write().insert(client_id, tx);
     }
@@ -216,16 +243,25 @@ impl Shared {
         }
     }
 
-    pub async fn broadcast(&self, message: Publish) {
+    pub async fn broadcast(&self, publish: Publish) {
         for peer in self.peers.read().iter() {
-            if let Err(e) = peer.1.send(message.clone()) {
+            if let Err(e) = peer.1.send(Message::Forward(publish.clone())) {
                 println!("broadcast {} {}", peer.0, e);
             }
         }
     }
-    pub async fn forward(&self, client_id: ByteString, message: Publish) -> Result<()> {
+    pub async fn forward(&self, client_id: ByteString, publish: Publish) -> Result<()> {
         if let Some(tx) = self.peers.read().get(&client_id) {
-            if let Err(_e) = tx.send(message) {
+            if let Err(_e) = tx.send(Message::Forward(publish)) {
+                return Err(Box::new(ParseError::InvalidClientId));
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn send(&self, client_id: ByteString, msg: Message) -> Result<()> {
+        if let Some(tx) = self.peers.read().get(&client_id) {
+            if let Err(_e) = tx.send(msg) {
                 return Err(Box::new(ParseError::InvalidClientId));
             }
         }

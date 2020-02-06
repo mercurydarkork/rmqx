@@ -28,7 +28,7 @@ impl Client {
                 peer.connect(last_will, username, password, |_p, tx| c.tx = Some(tx))
                     .await?;
                 tokio::spawn(async move {
-                    if let Err(e) = peer.process_loop().await {
+                    if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await {
                         println!(
                             "failed to process connection {}; error = {}",
                             peer.client_id, e
@@ -46,7 +46,7 @@ impl Client {
 
     pub fn publish(&self, publish: Publish) -> Result<()> {
         if let Some(tx) = &self.tx {
-            if let Err(_e) = tx.send(publish) {
+            if let Err(_e) = tx.send(Message::Forward(publish)) {
                 return Err(Box::new(ParseError::InvalidClientId));
             }
         }
