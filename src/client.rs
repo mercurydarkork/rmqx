@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
         tokio::spawn(async move {
             let _ = Client::connect(
                 &addr,
-                ByteString::from(client_id),
+                client_id,
                 None,
                 Some(ByteString::from("username")),
                 Some(Bytes::from("password")),

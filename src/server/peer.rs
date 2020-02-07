@@ -20,7 +20,7 @@ use crate::server::*;
 
 pub struct Peer<T, U> {
     transport: Framed<T, U>,
-    pub client_id: ByteString,
+    pub client_id: String,
     pub keep_alive: Duration,
     pub clean_session: bool,
     pub last_will: Option<LastWill>,
@@ -52,7 +52,7 @@ where
     pub fn new(transport: Framed<T, U>) -> Self {
         Self {
             transport: transport,
-            client_id: bytestring::ByteString::new(),
+            client_id: "".to_string(),
             keep_alive: Duration::from_secs(60),
             clean_session: false,
             last_will: None,
@@ -62,7 +62,7 @@ where
         }
     }
 
-    pub fn from(client_id: ByteString, transport: Framed<T, U>) -> Self {
+    pub fn from(client_id: String, transport: Framed<T, U>) -> Self {
         Self {
             transport: transport,
             client_id: client_id,
@@ -279,7 +279,7 @@ where
             }
             let (tx, rx) = mpsc::unbounded_channel();
             if f(&connect, tx.clone()) {
-                self.client_id = connect.client_id.clone();
+                self.client_id = connect.client_id.to_string();
                 self.rx = Some(rx);
                 self.tx = Some(tx);
                 self.send_connect_ack(true, ConnectCode::ConnectionAccepted)
@@ -302,7 +302,7 @@ where
         F: FnMut(&mut Peer<T, U>, Tx),
     {
         let connect = Connect {
-            client_id: self.client_id.clone(),
+            client_id: ByteString::from(self.client_id.to_string()),
             protocol: Protocol::default(),
             clean_session: self.clean_session,
             keep_alive: self.keep_alive.as_secs() as u16,

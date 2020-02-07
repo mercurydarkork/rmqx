@@ -18,7 +18,7 @@ pub struct Client {
 impl Client {
     pub async fn connect<A: AsRef<str>>(
         addr: A,
-        client_id: ByteString,
+        client_id: String,
         last_will: Option<LastWill>,
         username: Option<ByteString>,
         password: Option<Bytes>,

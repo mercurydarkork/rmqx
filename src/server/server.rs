@@ -168,7 +168,7 @@ where
             if *&state.exist(&conn.client_id) {
                 &state.kick(&conn.client_id);
             }
-            &state.add_peer(conn.client_id.clone(), tx);
+            &state.add_peer(conn.client_id.to_string(), tx);
             true
         })
         .await
@@ -203,7 +203,7 @@ pub type Tx = mpsc::UnboundedSender<Message>;
 pub type Rx = mpsc::UnboundedReceiver<Message>;
 
 pub struct Shared {
-    peers: RwLock<HashMap<ByteString, Tx>>,
+    peers: RwLock<HashMap<String, Tx>>,
 }
 
 lazy_static! {
@@ -221,22 +221,22 @@ impl Shared {
         self.peers.read().len()
     }
 
-    pub fn exist(&self, client_id: &ByteString) -> bool {
+    pub fn exist(&self, client_id: &str) -> bool {
         self.peers.read().contains_key(client_id)
     }
 
-    pub fn kick(&self, client_id: &ByteString) {
+    pub fn kick(&self, client_id: &str) {
         if let Some(tx) = self.peers.write().remove(client_id) {
             let _ = tx.send(Message::Kick);
             drop(tx);
         }
     }
 
-    pub fn add_peer(&self, client_id: ByteString, tx: Tx) {
+    pub fn add_peer(&self, client_id: String, tx: Tx) {
         self.peers.write().insert(client_id, tx);
     }
 
-    pub fn remove_peer(&self, client_id: &ByteString) {
+    pub fn remove_peer(&self, client_id: &str) {
         if let Some(tx) = self.peers.write().remove(client_id) {
             drop(tx);
         }
@@ -249,8 +249,8 @@ impl Shared {
             }
         }
     }
-    pub async fn forward(&self, client_id: ByteString, publish: Publish) -> Result<()> {
-        if let Some(tx) = self.peers.read().get(&client_id) {
+    pub async fn forward(&self, client_id: &str, publish: Publish) -> Result<()> {
+        if let Some(tx) = self.peers.read().get(client_id) {
             if let Err(_e) = tx.send(Message::Forward(publish)) {
                 return Err(Box::new(ParseError::InvalidClientId));
             }
@@ -258,8 +258,8 @@ impl Shared {
         Ok(())
     }
 
-    pub async fn send(&self, client_id: ByteString, msg: Message) -> Result<()> {
-        if let Some(tx) = self.peers.read().get(&client_id) {
+    pub async fn send(&self, client_id: &str, msg: Message) -> Result<()> {
+        if let Some(tx) = self.peers.read().get(client_id) {
             if let Err(_e) = tx.send(msg) {
                 return Err(Box::new(ParseError::InvalidClientId));
             }
