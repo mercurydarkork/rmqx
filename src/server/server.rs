@@ -168,7 +168,7 @@ where
             if *&state.exist(&conn.client_id) {
                 &state.kick(&conn.client_id);
             }
-            &state.add_peer(conn.client_id.to_string(), tx);
+            &state.add_peer(conn.client_id.clone(), tx);
             true
         })
         .await
@@ -203,7 +203,7 @@ pub type Tx = mpsc::UnboundedSender<Message>;
 pub type Rx = mpsc::UnboundedReceiver<Message>;
 
 pub struct Shared {
-    peers: RwLock<HashMap<String, Tx>>,
+    peers: RwLock<HashMap<ByteString, Tx>>,
 }
 
 lazy_static! {
@@ -232,7 +232,7 @@ impl Shared {
         }
     }
 
-    pub fn add_peer(&self, client_id: String, tx: Tx) {
+    pub fn add_peer(&self, client_id: ByteString, tx: Tx) {
         self.peers.write().insert(client_id, tx);
     }
 
