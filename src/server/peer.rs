@@ -32,7 +32,6 @@ pub struct Peer<T, U> {
 
 impl<T, U> Drop for Peer<T, U> {
     fn drop(&mut self) {
-        println!("drop peer {}", self.client_id);
         drop(&mut self.client_id);
         if let Some(rx) = &mut self.rx {
             drop(rx);
