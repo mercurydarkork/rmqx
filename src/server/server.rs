@@ -64,9 +64,6 @@ pub async fn serve_webapi<T: AsRef<str>>(laddr: T) -> Result<()> {
     }
 
     async fn state_clients() -> Result<Response<Body>> {
-        // let data = json!({
-        //     "clients":&state.client_num().await,
-        // });
         let data = json!({
             "clients":&state.client_num(),
         });
@@ -184,6 +181,7 @@ where
         }
         &state.remove_peer(&peer.client_id);
     }
+    drop(peer);
 }
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -268,37 +266,4 @@ impl Shared {
         }
         Ok(())
     }
-    // pub async fn client_num(&self) -> usize {
-    //     self.peers.read().await.len()
-    // }
-    // pub async fn add_peer(&self, client_id: ByteString, tx: Tx) {
-    //     self.peers.write().await.insert(client_id.clone(), tx);
-    //     // println!("add peer {} {}", client_id, self.peers.read().await.len());
-    // }
-    // pub async fn remove_peer(&self, client_id: &ByteString) {
-    //     if let Some(tx) = self.peers.write().await.remove(client_id) {
-    //         drop(tx);
-    //     }
-    //     // println!(
-    //     //     "remove peer {} {}",
-    //     //     client_id,
-    //     //     self.peers.read().await.len()
-    //     // );
-    // }
-    // pub async fn broadcast(&self, message: Publish) {
-    //     println!("broadcast {}", self.client_num().await);
-    //     for peer in self.peers.read().await.iter() {
-    //         if let Err(e) = peer.1.send(message.clone()) {
-    //             println!("broadcast {} {}", peer.0, e);
-    //         }
-    //     }
-    // }
-    // pub async fn forward(&self, client_id: ByteString, message: Publish) -> Result<()> {
-    //     if let Some(tx) = self.peers.read().await.get(&client_id) {
-    //         if let Err(_e) = tx.send(message.clone()) {
-    //             return Err(Box::new(ParseError::InvalidClientId));
-    //         }
-    //     }
-    //     Ok(())
-    // }
 }

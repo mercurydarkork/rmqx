@@ -68,23 +68,17 @@ pub struct Connect {
     pub client_id: ByteString,
     /// username can be used by the Server for authentication and authorization.
     pub username: Option<ByteString>,
-    /// password can be used by the Server for authentication and authorization.
     pub password: Option<Bytes>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 /// Publish message
 pub struct Publish {
-    /// this might be re-delivery of an earlier attempt to send the Packet.
     pub dup: bool,
     pub retain: bool,
-    /// the level of assurance for delivery of an Application Message.
     pub qos: QoS,
-    /// the information channel to which payload data is published.
     pub topic: ByteString,
-    /// only present in PUBLISH Packets where the QoS level is 1 or 2.
     pub packet_id: Option<u16>,
-    /// the Application Message that is being published.
     pub payload: Bytes,
 }
 
@@ -98,10 +92,8 @@ pub enum SubscribeReturnCode {
 #[derive(Debug, PartialEq, Clone)]
 /// MQTT Control Packets
 pub enum Packet {
-    /// Client request to connect to Server
     Connect(Connect),
 
-    /// Connect acknowledgment
     ConnectAck {
         /// enables a Client to establish whether the Client and Server have a consistent view
         /// about whether there is already stored Session state.

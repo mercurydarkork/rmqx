@@ -30,6 +30,19 @@ pub struct Peer<T, U> {
     // state: Arc<Shared>,
 }
 
+impl<T, U> Drop for Peer<T, U> {
+    fn drop(&mut self) {
+        println!("drop peer {}", self.client_id);
+        drop(&mut self.client_id);
+        if let Some(rx) = &mut self.rx {
+            drop(rx);
+        }
+        if let Some(tx) = &mut self.tx {
+            drop(tx);
+        }
+    }
+}
+
 impl<T, U> Peer<T, U>
 where
     T: AsyncRead + AsyncWrite + Unpin,
@@ -62,13 +75,6 @@ where
         }
     }
 
-    // pub async fn connect<F>(addr: &str, f: F) -> tokio::task::JoinHandle<Self>
-    // where
-    //     F: FnOnce(&mut Peer<T, U>),
-    //     F: Send + 'static,
-    // {
-    // }
-
     pub fn set_keep_alive(&mut self, keep_alive: Duration) {
         self.keep_alive = keep_alive
     }
@@ -76,6 +82,7 @@ where
     async fn receive(&mut self) -> Result<Option<Message>> {
         self.receive_timeout(self.keep_alive).await
     }
+
     async fn receive_timeout(&mut self, tm: Duration) -> Result<Option<Message>> {
         match timeout(tm, self.next()).await {
             Ok(Some(Ok(msg))) => {
@@ -114,10 +121,12 @@ where
         let connect = Packet::Connect(connect);
         self.send(connect).await
     }
+
     async fn send_disconnect(&mut self) -> Result<()> {
         let disconnect = Packet::Disconnect {};
         self.send(disconnect).await
     }
+
     async fn send_connect_ack(
         &mut self,
         session_present: bool,
