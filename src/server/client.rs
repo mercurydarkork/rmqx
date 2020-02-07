@@ -23,34 +23,40 @@ impl Client {
         username: Option<ByteString>,
         password: Option<Bytes>,
     ) -> Result<Self> {
-        let tm = Duration::from_secs(30);
+        //let tm = Duration::from_secs(30);
         loop {
-            if let Ok(Ok(socket)) = timeout(tm, TcpStream::connect(addr.as_ref())).await {
-                let codec = Framed::new(socket, MqttCodec::new());
-                let mut peer = Peer::from(&client_id, codec);
-                peer.set_keep_alive(Duration::from_secs(30));
-                let mut c = Client { tx: None };
-                if let Ok(_) = peer
-                    .connect(
-                        last_will.clone(),
-                        username.clone(),
-                        password.clone(),
-                        |_p, tx| c.tx = Some(tx),
-                    )
-                    .await
-                {
-                    tokio::spawn(async move {
-                        if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await {
-                            println!(
-                                "failed to process connection {}; error = {}",
-                                peer.client_id, e
-                            );
+            match TcpStream::connect(addr.as_ref()).await {
+                Ok(socket) => {
+                    let codec = Framed::new(socket, MqttCodec::new());
+                    let mut peer = Peer::from(&client_id, codec);
+                    peer.set_keep_alive(Duration::from_secs(30));
+                    let mut c = Client { tx: None };
+                    match peer
+                        .connect(
+                            last_will.clone(),
+                            username.clone(),
+                            password.clone(),
+                            |_p, tx| c.tx = Some(tx),
+                        )
+                        .await
+                    {
+                        Ok(()) => {
+                            tokio::spawn(async move {
+                                if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await
+                                {
+                                    println!(
+                                        "failed to process connection {}; error = {}",
+                                        peer.client_id, e
+                                    );
+                                }
+                            });
+                            return Ok(c);
                         }
-                    });
-                    return Ok(c);
+                        Err(e) => println!("peer.connect {} {}", addr.as_ref(), e),
+                    }
                 }
+                Err(e) => println!("tcp.connect {} {}", addr.as_ref(), e),
             }
-            println!("reconnect");
         }
     }
 
