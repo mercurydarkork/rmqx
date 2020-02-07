@@ -37,10 +37,32 @@ async fn main() -> Result<()> {
                 );
             }
         };
+        let mqtt_tls = async {
+            if let Some(laddr) = &options.listener.mqtt_tls_laddr {
+                if let Some(p12) = &options.listener.p12_file {
+                    if let Some(passwd) = &options.listener.p12_passwd {
+                        if let Err(err) = serve_tls(&laddr, &p12, &passwd).await {
+                            println!("error: mqtt.tls listen on {}, {}", &laddr, err);
+                        }
+                    }
+                }
+            }
+        };
         let mqtt_ws = async {
             if let Some(laddr) = &options.listener.mqtt_ws_laddr {
                 if let Err(err) = serve_ws(&laddr).await {
                     println!("error: mqtt.ws listen on {}, {}", &laddr, err);
+                }
+            }
+        };
+        let mqtt_wss = async {
+            if let Some(laddr) = &options.listener.mqtt_wss_laddr {
+                if let Some(p12) = &options.listener.p12_file {
+                    if let Some(passwd) = &options.listener.p12_passwd {
+                        if let Err(err) = serve_wss(&laddr, &p12, &passwd).await {
+                            println!("error: mqtt.wss listen on {}, {}", &laddr, err);
+                        }
+                    }
                 }
             }
         };
@@ -52,7 +74,7 @@ async fn main() -> Result<()> {
                 );
             }
         };
-        let _ = join!(mqtt, wapi, mqtt_ws, coap);
+        let _ = join!(mqtt, mqtt_tls, wapi, mqtt_ws, mqtt_wss, coap);
     };
     run.await;
     Ok(())

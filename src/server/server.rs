@@ -8,19 +8,19 @@ use crate::server::*;
 use bytes::Buf;
 use bytestring::ByteString;
 use coap::{IsMessage, Method, Server};
-//use futures::channel::mpsc;
 use futures::join;
 use futures::{SinkExt, StreamExt};
-// use native_tls::Identity;
+use native_tls::Identity;
 use parking_lot::RwLock;
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tokio::time::Duration;
-use tokio_util::codec::Framed;
+use tokio_util::codec::{Decoder, Encoder, Framed};
 
 pub async fn serve_coap<T: AsRef<str>>(laddr: T) -> Result<()> {
     let mut server = Server::new(laddr.as_ref())?;
@@ -108,43 +108,35 @@ pub async fn serve_wss<T: AsRef<str>>(_laddr: T, _p12: T, _passwd: T) -> Result<
     Ok(())
 }
 
-// pub async fn serve_tls<T: AsRef<str>, U: AsRef<std::path::Path>, W: AsRef<str>>(
-//     laddr: T,
-//     cert: U,
-//     passwd: W,
-// ) -> Result<()> {
-//     let mut listener = TcpListener::bind(laddr.as_ref()).await?;
-//     let der = fs::read(cert).await?;
-//     let cert = Identity::from_pkcs12(&der, passwd.as_ref())?;
-//     let tls_acceptor =
-//         tokio_tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(cert).build()?);
-//     println!("listening mqtt.tls on {}", laddr.as_ref());
-//     loop {
-//         match listener.accept().await {
-//             Ok((socket, addr)) => {
-//                 socket.set_nodelay(true)?;
-//                 socket.set_keepalive(None)?;
-//                 socket.set_recv_buffer_size(4096)?;
-//                 socket.set_send_buffer_size(4096)?;
-//                 let tls_acceptor = tls_acceptor.clone();
-//                 tokio::spawn(async move {
-//                     if let Ok(socket) = tls_acceptor.accept(socket).await {
-//                         let mut peer = crate::peer::Peer::new(
-//                             Arc::clone(&state),
-//                             Framed::new(socket, MqttCodec::new()),
-//                         );
-//                         peer.set_ttl(Duration::from_secs(15));
-//                         if let Err(e) = peer.process().await {
-//                             println!("failed to process connection {}; error = {}", addr, e);
-//                         }
-//                         println!("connection {} closed", addr);
-//                     }
-//                 });
-//             }
-//             Err(e) => println!("error accepting socket; error = {:?}", e),
-//         }
-//     }
-// }
+pub async fn serve_tls<T: AsRef<str>, U: AsRef<std::path::Path>, W: AsRef<str>>(
+    laddr: T,
+    cert: U,
+    passwd: W,
+) -> Result<()> {
+    let mut listener = TcpListener::bind(laddr.as_ref()).await?;
+    let der = fs::read(cert).await?;
+    let cert = Identity::from_pkcs12(&der, passwd.as_ref())?;
+    let tls_acceptor =
+        tokio_tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(cert).build()?);
+    println!("mqtt.tls listen on {}", laddr.as_ref());
+    loop {
+        match listener.accept().await {
+            Ok((socket, addr)) => {
+                socket.set_nodelay(true)?;
+                socket.set_keepalive(None)?;
+                socket.set_recv_buffer_size(4096)?;
+                socket.set_send_buffer_size(4096)?;
+                let tls_acceptor = tls_acceptor.clone();
+                tokio::spawn(async move {
+                    if let Ok(socket) = tls_acceptor.accept(socket).await {
+                        process(Peer::new(Framed::new(socket, MqttCodec::new())), addr).await
+                    }
+                });
+            }
+            Err(e) => println!("error accepting socket; error = {:?}", e),
+        }
+    }
+}
 
 pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
     use bytes::BufMut;
@@ -158,33 +150,42 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
                 socket.set_nodelay(true)?;
                 socket.set_keepalive(Some(std::time::Duration::new(60, 0)))?;
                 tokio::spawn(async move {
-                    let mut peer = Peer::new(Framed::new(socket, MqttCodec::new()));
-                    peer.set_keep_alive(Duration::from_secs(60));
-                    if let Ok(()) = peer
-                        .handshake(|conn, tx| -> bool {
-                            if *&state.exist(&conn.client_id) {
-                                &state.kick(&conn.client_id);
-                            }
-                            &state.add_peer(conn.client_id.clone(), tx);
-                            true
-                        })
-                        .await
-                    {
-                        if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await {
-                            println!(
-                                "failed to process connection {} {}; error = {}",
-                                peer.client_id, addr, e
-                            );
-                        }
-                        &state.remove_peer(&peer.client_id);
-                    }
-                    drop(peer)
+                    process(Peer::new(Framed::new(socket, MqttCodec::new())), addr).await
                 });
             }
             Err(e) => println!("error accepting socket; error = {:?}", e),
         }
     }
 }
+
+async fn process<T, U>(peer: Peer<T, U>, addr: SocketAddr)
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+    U: Decoder<Item = Packet, Error = ParseError>,
+    U: Encoder<Item = Packet, Error = ParseError>,
+{
+    let mut peer = peer;
+    peer.set_keep_alive(Duration::from_secs(60));
+    if let Ok(()) = peer
+        .handshake(|conn, tx| -> bool {
+            if *&state.exist(&conn.client_id) {
+                &state.kick(&conn.client_id);
+            }
+            &state.add_peer(conn.client_id.clone(), tx);
+            true
+        })
+        .await
+    {
+        if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await {
+            println!(
+                "failed to process connection {} {}; error = {}",
+                peer.client_id, addr, e
+            );
+        }
+        &state.remove_peer(&peer.client_id);
+    }
+}
+
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
 

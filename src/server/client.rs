@@ -1,3 +1,7 @@
+#![allow(non_snake_case)]
+#![allow(unused_imports)]
+#![allow(non_upper_case_globals)]
+#![allow(dead_code)]
 use crate::codec::mqtt::*;
 use crate::server::*;
 use bytes::Bytes;
@@ -36,14 +40,11 @@ impl Client {
                     .await
                 {
                     tokio::spawn(async move {
-                        loop {
-                            if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await {
-                                println!(
-                                    "failed to process connection {}; error = {}",
-                                    peer.client_id, e
-                                );
-                            }
-                            delay_for(Duration::from_secs(5)).await;
+                        if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await {
+                            println!(
+                                "failed to process connection {}; error = {}",
+                                peer.client_id, e
+                            );
                         }
                     });
                     return Ok(c);

@@ -13,8 +13,8 @@ pub struct Listener {
 }
 #[derive(Debug, Clone, Deserialize)]
 pub struct Limiter {
-    pub max_conns: u32,           //最大连接数
-    pub max_conn_pre_second: u32, //每秒连接速率
+    pub max_conns: u32,                   //最大连接数
+    pub max_conn_pre_second: Option<u32>, //每秒连接速率
 }
 #[derive(Debug, Clone, Deserialize)]
 pub struct Authentication {
@@ -45,10 +45,6 @@ impl Options {
     pub fn new() -> Result<Self, ConfigError> {
         let mut s = Config::new();
         s.set_default("listener.mqtt_laddr", "0.0.0.0:1883")?;
-        s.set_default("listener.mqtt_tls_laddr", "0.0.0.0:8883")?;
-        s.set_default("listener.mqtt_ws_laddr", "0.0.0.0:80")?;
-        s.set_default("listener.mqtt_wss_laddr", "0.0.0.0:443")?;
-        s.set_default("listener.coap_laddr", "0.0.0.0:5683")?;
         s.set_default("listener.webapi_laddr", "0.0.0.0:5555")?;
         s.set_default("limiter.max_conns", 1024)?;
         s.set_default("limiter.max_conn_pre_second", 200)?;
