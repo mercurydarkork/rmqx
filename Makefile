@@ -1,3 +1,5 @@
+all: release docker
+
 debug:
 	cross build --target=x86_64-unknown-linux-musl
 
@@ -7,8 +9,6 @@ release:
 docker:
 	docker build -t registry.cn-hangzhou.aliyuncs.com/bis28/rmqx .
 	docker push registry.cn-hangzhou.aliyuncs.com/bis28/rmqx
-
-all: release docker
 
 clean:
 	cargo clean
