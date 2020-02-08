@@ -185,10 +185,10 @@ where
     where
         F: Fn(&Packet) -> bool,
     {
+        use tokio::time::delay_for;
         loop {
-            if let Err(e) = self.receive().await {
-                return Err(e);
-            }
+            delay_for(Duration::from_secs(30)).await;
+            return Ok(());
             // match self.receive().await {
             //     Ok(Some(Message::Forward(publish))) => self.publish(publish).await?,
             //     Ok(Some(Message::Mqtt(Packet::Publish(publish)))) => {
@@ -335,11 +335,11 @@ where
 {
     type Item = Result<Message>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if let Some(rx) = &mut self.rx {
-            if let Poll::Ready(Some(msg)) = Pin::new(rx).poll_next(cx) {
-                return Poll::Ready(Some(Ok(msg)));
-            }
-        }
+        // if let Some(rx) = &mut self.rx {
+        //     if let Poll::Ready(Some(msg)) = Pin::new(rx).poll_next(cx) {
+        //         return Poll::Ready(Some(Ok(msg)));
+        //     }
+        // }
         let result: Option<_> = futures::ready!(Pin::new(&mut self.transport).poll_next(cx));
         Poll::Ready(match result {
             Some(Ok(msg)) => Some(Ok(Message::Mqtt(msg))),
