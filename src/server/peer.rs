@@ -11,7 +11,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::sync::{mpsc, Mutex};
+// use tokio::sync::{mpsc, Mutex};
+use futures::channel::mpsc;
 use tokio::time::{timeout, Duration};
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
@@ -28,18 +29,6 @@ pub struct Peer<T, U> {
     pub tx: Option<Tx>,
     from: bool,
     // state: Arc<Shared>,
-}
-
-impl<T, U> Drop for Peer<T, U> {
-    fn drop(&mut self) {
-        drop(&mut self.client_id);
-        if let Some(rx) = &mut self.rx {
-            drop(rx);
-        }
-        if let Some(tx) = &mut self.tx {
-            drop(tx);
-        }
-    }
 }
 
 impl<T, U> Peer<T, U>
@@ -199,14 +188,6 @@ where
         loop {
             match self.receive().await {
                 Ok(Some(Message::Forward(publish))) => self.publish(publish).await?,
-                Ok(Some(Message::Mqtt(Packet::PingRequest))) => self.send_pong().await?,
-                Ok(Some(Message::Mqtt(Packet::Connect(_)))) => {
-                    self.send_connect_ack(false, ConnectCode::NotAuthorized)
-                        .await?;
-                    self.send_disconnect().await?;
-                    //todo 处理异常数据包
-                    return Ok(());
-                }
                 Ok(Some(Message::Mqtt(Packet::Publish(publish)))) => {
                     if publish.qos == QoS::AtLeastOnce {
                         self.send_publish_ack(publish.packet_id.unwrap()).await?;
@@ -222,6 +203,15 @@ where
                 }
                 Ok(Some(Message::Mqtt(Packet::PublishReceived { packet_id }))) => {
                     self.send_publish_release(packet_id).await?;
+                }
+                Ok(Some(Message::Mqtt(Packet::PublishAck { packet_id }))) => {
+                    f(&Packet::PublishAck { packet_id });
+                }
+                Ok(Some(Message::Mqtt(Packet::Disconnect))) => {
+                    f(&Packet::Disconnect);
+                }
+                Ok(Some(Message::Mqtt(Packet::PublishComplete { packet_id }))) => {
+                    f(&Packet::PublishComplete { packet_id });
                 }
                 Ok(Some(Message::Mqtt(Packet::Subscribe {
                     packet_id,
@@ -245,21 +235,19 @@ where
                         topic_filters,
                     });
                 }
-                Ok(Some(Message::Mqtt(Packet::PublishAck { packet_id }))) => {
-                    f(&Packet::PublishAck { packet_id });
-                }
-                Ok(Some(Message::Mqtt(Packet::Disconnect))) => {
-                    f(&Packet::Disconnect);
-                }
-                Ok(Some(Message::Mqtt(Packet::PublishComplete { packet_id }))) => {
-                    f(&Packet::PublishComplete { packet_id });
+                Ok(Some(Message::Mqtt(Packet::PingRequest))) => self.send_pong().await?,
+                Ok(Some(Message::Mqtt(Packet::Connect(_)))) => {
+                    self.send_connect_ack(false, ConnectCode::NotAuthorized)
+                        .await?;
+                    self.send_disconnect().await?;
+                    //todo 处理异常数据包
+                    return Ok(());
                 }
                 Ok(Some(Message::Mqtt(_))) => {}
                 Ok(Some(Message::KeepAlive)) => {
                     self.send_ping().await?;
                 }
-                Ok(Some(Message::Kick)) => return Ok(()), //被踢掉了
-                Ok(None) => return Ok(()),
+                Ok(Some(Message::Kick)) | Ok(None) => return Ok(()), //被踢掉了
                 Err(e) => return Err(e),
             }
         }
@@ -276,7 +264,8 @@ where
                     .await?;
                 return Err(Box::new(ParseError::UnsupportedProtocolLevel));
             }
-            let (tx, rx) = mpsc::unbounded_channel();
+            //let (tx, rx) = mpsc::unbounded_channel();
+            let (tx, rx) = mpsc::unbounded();
             if f(&connect, tx.clone()) {
                 self.client_id = connect.client_id;
                 self.rx = Some(rx);
@@ -317,7 +306,8 @@ where
                 return_code,
             }))) => {
                 if return_code == ConnectCode::ConnectionAccepted {
-                    let (tx, rx) = mpsc::unbounded_channel();
+                    //let (tx, rx) = mpsc::unbounded_channel();
+                    let (tx, rx) = mpsc::unbounded();
                     self.rx = Some(rx);
                     f(self, tx);
                 }
@@ -353,5 +343,18 @@ where
             Some(Err(err)) => Some(Err(Box::new(err))),
             None => None,
         })
+    }
+}
+
+impl<T, U> Drop for Peer<T, U> {
+    fn drop(&mut self) {
+        drop(&mut self.client_id);
+        drop(&mut self.transport);
+        if let Some(rx) = &mut self.rx {
+            drop(rx);
+        }
+        if let Some(tx) = &mut self.tx {
+            drop(tx);
+        }
     }
 }

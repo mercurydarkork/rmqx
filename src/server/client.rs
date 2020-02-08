@@ -6,6 +6,7 @@ use crate::codec::mqtt::*;
 use crate::server::*;
 use bytes::Bytes;
 use bytestring::ByteString;
+use futures::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
 use tokio::time::delay_for;
 use tokio::time::{timeout, Duration};
@@ -23,7 +24,6 @@ impl Client {
         username: Option<ByteString>,
         password: Option<Bytes>,
     ) -> Result<Self> {
-        //let tm = Duration::from_secs(30);
         loop {
             match TcpStream::connect(addr.as_ref()).await {
                 Ok(socket) => {
@@ -60,11 +60,13 @@ impl Client {
         }
     }
 
-    pub fn publish(&self, publish: Publish) -> Result<()> {
+    pub async fn publish(&self, publish: Publish) -> Result<()> {
         if let Some(tx) = &self.tx {
-            if let Err(_e) = tx.send(Message::Forward(publish)) {
-                return Err(Box::new(ParseError::InvalidClientId));
-            }
+            // if let Err(_e) = tx.send(Message::Forward(publish)) {
+            //     return Err(Box::new(ParseError::InvalidClientId));
+            // }
+            let mut tx = tx;
+            tx.send(Message::Forward(publish)).await?;
         }
         Ok(())
     }

@@ -7,6 +7,8 @@ extern crate lazy_static;
 extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate futures;
 
 mod codec;
 mod options;
@@ -14,7 +16,6 @@ mod server;
 mod webhook;
 
 use crate::server::*;
-use futures::join;
 use options::Options;
 use std::*;
 

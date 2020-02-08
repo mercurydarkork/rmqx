@@ -1,11 +1,15 @@
-build:
+debug:
+	cross build --target=x86_64-unknown-linux-musl
+
+release:
 	cross build --release --target=x86_64-unknown-linux-musl
 
-push:
-	docker build --no-cache -t  registry.cn-hangzhou.aliyuncs.com/bis28/rmqx .
+docker:
+	docker build -t registry.cn-hangzhou.aliyuncs.com/bis28/rmqx .
 	docker push registry.cn-hangzhou.aliyuncs.com/bis28/rmqx
 
-all:
-	@build
-	@push
+all: release docker
+
+clean:
+	cargo clean
 
