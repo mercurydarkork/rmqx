@@ -186,70 +186,73 @@ where
         F: Fn(&Packet) -> bool,
     {
         loop {
-            match self.receive().await {
-                Ok(Some(Message::Forward(publish))) => self.publish(publish).await?,
-                Ok(Some(Message::Mqtt(Packet::Publish(publish)))) => {
-                    if publish.qos == QoS::AtLeastOnce {
-                        self.send_publish_ack(publish.packet_id.unwrap()).await?;
-                        f(&Packet::Publish(publish));
-                    } else if publish.qos == QoS::ExactlyOnce {
-                        self.send_publish_received(publish.packet_id.unwrap())
-                            .await?;
-                    }
-                }
-                Ok(Some(Message::Mqtt(Packet::PublishRelease { packet_id }))) => {
-                    self.send_publish_complete(packet_id).await?;
-                    f(&Packet::PublishRelease { packet_id });
-                }
-                Ok(Some(Message::Mqtt(Packet::PublishReceived { packet_id }))) => {
-                    self.send_publish_release(packet_id).await?;
-                }
-                Ok(Some(Message::Mqtt(Packet::PublishAck { packet_id }))) => {
-                    f(&Packet::PublishAck { packet_id });
-                }
-                Ok(Some(Message::Mqtt(Packet::Disconnect))) => {
-                    f(&Packet::Disconnect);
-                }
-                Ok(Some(Message::Mqtt(Packet::PublishComplete { packet_id }))) => {
-                    f(&Packet::PublishComplete { packet_id });
-                }
-                Ok(Some(Message::Mqtt(Packet::Subscribe {
-                    packet_id,
-                    topic_filters,
-                }))) => {
-                    if f(&Packet::Subscribe {
-                        packet_id,
-                        topic_filters,
-                    }) {
-                        self.send_subscribe_ack(packet_id).await?;
-                    }
-                    //todo 订阅失败处理
-                }
-                Ok(Some(Message::Mqtt(Packet::Unsubscribe {
-                    packet_id,
-                    topic_filters,
-                }))) => {
-                    self.send_unsubscribe_ack(packet_id).await?;
-                    f(&Packet::Unsubscribe {
-                        packet_id,
-                        topic_filters,
-                    });
-                }
-                Ok(Some(Message::Mqtt(Packet::PingRequest))) => self.send_pong().await?,
-                Ok(Some(Message::Mqtt(Packet::Connect(_)))) => {
-                    self.send_connect_ack(false, ConnectCode::NotAuthorized)
-                        .await?;
-                    self.send_disconnect().await?;
-                    //todo 处理异常数据包
-                    return Ok(());
-                }
-                Ok(Some(Message::Mqtt(_))) => {}
-                Ok(Some(Message::KeepAlive)) => {
-                    self.send_ping().await?;
-                }
-                Ok(Some(Message::Kick)) | Ok(None) => return Ok(()), //被踢掉了
-                Err(e) => return Err(e),
+            if let Err(e) = self.receive().await {
+                return Err(e);
             }
+            // match self.receive().await {
+            //     Ok(Some(Message::Forward(publish))) => self.publish(publish).await?,
+            //     Ok(Some(Message::Mqtt(Packet::Publish(publish)))) => {
+            //         if publish.qos == QoS::AtLeastOnce {
+            //             self.send_publish_ack(publish.packet_id.unwrap()).await?;
+            //             f(&Packet::Publish(publish));
+            //         } else if publish.qos == QoS::ExactlyOnce {
+            //             self.send_publish_received(publish.packet_id.unwrap())
+            //                 .await?;
+            //         }
+            //     }
+            //     Ok(Some(Message::Mqtt(Packet::PublishRelease { packet_id }))) => {
+            //         self.send_publish_complete(packet_id).await?;
+            //         f(&Packet::PublishRelease { packet_id });
+            //     }
+            //     Ok(Some(Message::Mqtt(Packet::PublishReceived { packet_id }))) => {
+            //         self.send_publish_release(packet_id).await?;
+            //     }
+            //     Ok(Some(Message::Mqtt(Packet::PublishAck { packet_id }))) => {
+            //         f(&Packet::PublishAck { packet_id });
+            //     }
+            //     Ok(Some(Message::Mqtt(Packet::Disconnect))) => {
+            //         f(&Packet::Disconnect);
+            //     }
+            //     Ok(Some(Message::Mqtt(Packet::PublishComplete { packet_id }))) => {
+            //         f(&Packet::PublishComplete { packet_id });
+            //     }
+            //     Ok(Some(Message::Mqtt(Packet::Subscribe {
+            //         packet_id,
+            //         topic_filters,
+            //     }))) => {
+            //         if f(&Packet::Subscribe {
+            //             packet_id,
+            //             topic_filters,
+            //         }) {
+            //             self.send_subscribe_ack(packet_id).await?;
+            //         }
+            //         //todo 订阅失败处理
+            //     }
+            //     Ok(Some(Message::Mqtt(Packet::Unsubscribe {
+            //         packet_id,
+            //         topic_filters,
+            //     }))) => {
+            //         self.send_unsubscribe_ack(packet_id).await?;
+            //         f(&Packet::Unsubscribe {
+            //             packet_id,
+            //             topic_filters,
+            //         });
+            //     }
+            //     Ok(Some(Message::Mqtt(Packet::PingRequest))) => self.send_pong().await?,
+            //     Ok(Some(Message::Mqtt(Packet::Connect(_)))) => {
+            //         self.send_connect_ack(false, ConnectCode::NotAuthorized)
+            //             .await?;
+            //         self.send_disconnect().await?;
+            //         //todo 处理异常数据包
+            //         return Ok(());
+            //     }
+            //     Ok(Some(Message::Mqtt(_))) => {}
+            //     Ok(Some(Message::KeepAlive)) => {
+            //         self.send_ping().await?;
+            //     }
+            //     Ok(Some(Message::Kick)) | Ok(None) => return Ok(()), //被踢掉了
+            //     Err(e) => return Err(e),
+            // }
         }
     }
 
