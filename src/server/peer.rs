@@ -337,7 +337,12 @@ where
                 return Poll::Ready(Some(Ok(msg)));
             }
         }
-        return Poll::Pending;
+        match Pin::new(&mut self.transport).poll_next(cx) {
+            Poll::Ready(Some(Ok(packet))) => return Poll::Ready(Some(Ok(Message::Mqtt(packet)))),
+            Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(Box::new(e)))),
+            Poll::Ready(None) => return Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
         // let result: Option<_> = futures::ready!(Pin::new(&mut self.transport).poll_next(cx));
         // Poll::Ready(match result {
         //     Some(Ok(msg)) => Some(Ok(Message::Mqtt(msg))),
