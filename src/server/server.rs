@@ -172,12 +172,12 @@ where
         })
         .await
     {
-        if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await {
-            println!(
-                "failed to process connection {} {}; error = {}",
-                peer.client_id, addr, e
-            );
-        }
+        // if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await {
+        //     println!(
+        //         "failed to process connection {} {}; error = {}",
+        //         peer.client_id, addr, e
+        //     );
+        // }
         &state.remove_peer(&peer.client_id);
     }
     drop(peer);
