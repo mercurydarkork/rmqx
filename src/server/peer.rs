@@ -332,17 +332,18 @@ where
 {
     type Item = Result<Message>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        // if let Some(rx) = &mut self.rx {
-        //     if let Poll::Ready(Some(msg)) = Pin::new(rx).poll_next(cx) {
-        //         return Poll::Ready(Some(Ok(msg)));
-        //     }
-        // }
-        let result: Option<_> = futures::ready!(Pin::new(&mut self.transport).poll_next(cx));
-        Poll::Ready(match result {
-            Some(Ok(msg)) => Some(Ok(Message::Mqtt(msg))),
-            Some(Err(err)) => Some(Err(Box::new(err))),
-            None => None,
-        })
+        if let Some(rx) = &mut self.rx {
+            if let Poll::Ready(Some(msg)) = Pin::new(rx).poll_next(cx) {
+                return Poll::Ready(Some(Ok(msg)));
+            }
+        }
+        return Poll::Pending;
+        // let result: Option<_> = futures::ready!(Pin::new(&mut self.transport).poll_next(cx));
+        // Poll::Ready(match result {
+        //     Some(Ok(msg)) => Some(Ok(Message::Mqtt(msg))),
+        //     Some(Err(err)) => Some(Err(Box::new(err))),
+        //     None => None,
+        // })
     }
 }
 
