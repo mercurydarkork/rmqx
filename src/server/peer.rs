@@ -192,6 +192,7 @@ where
                 }
                 Ok(None) => {
                     println!("receive none");
+                    return Ok(());
                 }
                 // Ok(Some(Message::Forward(publish))) => self.publish(publish).await?,
                 // Ok(Some(Message::Mqtt(Packet::Publish(publish)))) => {
