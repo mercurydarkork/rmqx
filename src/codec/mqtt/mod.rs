@@ -103,13 +103,13 @@ impl Decoder for MqttCodec {
                     if src.len() < fixed.remaining_length {
                         return Ok(None);
                     }
-                    return Ok(None);
-                    // let packet_buf = src.split_to(fixed.remaining_length).freeze();
-                    // let mut packet_cur = Cursor::new(packet_buf);
-                    // let packet = read_packet(&mut packet_cur, fixed)?;
-                    // self.state = DecodeState::FrameHeader;
-                    // src.reserve(2);
-                    // return Ok(Some(packet));
+                    let packet_buf = src.split_to(fixed.remaining_length).freeze();
+                    let mut packet_cur = Cursor::new(packet_buf.clone());
+                    let packet = read_packet(&mut packet_cur, fixed)?;
+                    self.state = DecodeState::FrameHeader;
+                    drop(packet_buf);
+                    src.reserve(2);
+                    return Ok(Some(packet));
                 }
             }
         }
