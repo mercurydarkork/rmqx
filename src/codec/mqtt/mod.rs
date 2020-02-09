@@ -103,12 +103,13 @@ impl Decoder for MqttCodec {
                     if src.len() < fixed.remaining_length {
                         return Ok(None);
                     }
-                    let packet_buf = src.split_to(fixed.remaining_length).freeze();
-                    let mut packet_cur = Cursor::new(packet_buf);
-                    let packet = read_packet(&mut packet_cur, fixed)?;
-                    self.state = DecodeState::FrameHeader;
-                    src.reserve(2);
-                    return Ok(Some(packet));
+                    return Ok(None);
+                    // let packet_buf = src.split_to(fixed.remaining_length).freeze();
+                    // let mut packet_cur = Cursor::new(packet_buf);
+                    // let packet = read_packet(&mut packet_cur, fixed)?;
+                    // self.state = DecodeState::FrameHeader;
+                    // src.reserve(2);
+                    // return Ok(Some(packet));
                 }
             }
         }
@@ -120,14 +121,14 @@ impl Encoder for MqttCodec {
     type Error = ParseError;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), ParseError> {
-        // if let Packet::Publish(Publish { qos, packet_id, .. }) = item {
-        //     if (qos == QoS::AtLeastOnce || qos == QoS::ExactlyOnce) && packet_id.is_none() {
-        //         return Err(ParseError::PacketIdRequired);
-        //     }
-        // }
-        // let content_size = get_encoded_size(&item);
-        // dst.reserve(content_size + 5);
-        // write_packet(&item, dst, content_size);
+        if let Packet::Publish(Publish { qos, packet_id, .. }) = item {
+            if (qos == QoS::AtLeastOnce || qos == QoS::ExactlyOnce) && packet_id.is_none() {
+                return Err(ParseError::PacketIdRequired);
+            }
+        }
+        let content_size = get_encoded_size(&item);
+        dst.reserve(content_size + 5);
+        write_packet(&item, dst, content_size);
         Ok(())
     }
 }
