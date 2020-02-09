@@ -172,7 +172,13 @@ where
         })
         .await
     {
-        if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await {
+        if let Err(e) = peer
+            .process_loop(|packet| -> bool {
+                drop(packet);
+                true
+            })
+            .await
+        {
             println!(
                 "failed to process connection {} {}; error = {}",
                 peer.client_id, addr, e
