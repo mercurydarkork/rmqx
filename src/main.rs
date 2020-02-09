@@ -18,7 +18,7 @@ mod webhook;
 use crate::server::*;
 use options::Options;
 use std::*;
-
+use tokio::signal;
 #[tokio::main]
 async fn main() -> Result<()> {
     let options = Options::new().unwrap();
@@ -75,8 +75,10 @@ async fn main() -> Result<()> {
                 );
             }
         };
-        let _ = join!(mqtt, mqtt_tls, wapi, mqtt_ws, mqtt_wss, coap);
+        let ctrlc = signal::ctrl_c();
+        let _ = join!(mqtt, mqtt_tls, wapi, mqtt_ws, mqtt_wss, coap, ctrlc);
     };
+    // signal::ctrl_c().await?;
     run.await;
     Ok(())
 }

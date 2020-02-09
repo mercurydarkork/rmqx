@@ -108,16 +108,7 @@ impl Decoder for MqttCodec {
                     let packet = read_packet(&mut packet_cur, fixed)?;
                     self.state = DecodeState::FrameHeader;
                     src.reserve(2);
-                    let conn = Connect {
-                        protocol: Protocol::MQTT(4),
-                        clean_session: true,
-                        keep_alive: 60,
-                        last_will: None,
-                        username: None,
-                        password: None,
-                        client_id: bytestring::ByteString::new(),
-                    };
-                    return Ok(Some(Packet::Connect(conn)));
+                    return Ok(Some(packet));
                 }
             }
         }
