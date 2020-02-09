@@ -14,7 +14,7 @@ pub use self::packet::*;
 pub use self::proto::*;
 pub use self::topic::*;
 
-use bytes::BytesMut;
+use bytes::{Buf, BytesMut};
 use std::io::Cursor;
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -107,7 +107,8 @@ impl Decoder for MqttCodec {
                     let mut packet_cur = Cursor::new(packet_buf);
                     let packet = read_packet(&mut packet_cur, fixed)?;
                     self.state = DecodeState::FrameHeader;
-                    src.reverse();
+                    src.reserve(2);
+                    src.advance(0);
                     return Ok(Some(packet));
                 }
             }
