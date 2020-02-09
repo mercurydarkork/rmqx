@@ -11,8 +11,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite};
-// use tokio::sync::{mpsc, Mutex};
-use futures::channel::mpsc;
+use tokio::sync::mpsc;
+//use futures::channel::mpsc;
 use tokio::time::{timeout, Duration};
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
@@ -343,8 +343,8 @@ where
                     .await?;
                 return Err(Box::new(ParseError::UnsupportedProtocolLevel));
             }
-            //let (tx, rx) = mpsc::unbounded_channel();
-            let (tx, rx) = mpsc::unbounded();
+            let (tx, rx) = mpsc::unbounded_channel();
+            //let (tx, rx) = mpsc::unbounded();
             if f(&connect, tx.clone()) {
                 self.client_id = connect.client_id;
                 self.rx = Some(rx);
@@ -385,8 +385,8 @@ where
                 return_code,
             }))) => {
                 if return_code == ConnectCode::ConnectionAccepted {
-                    //let (tx, rx) = mpsc::unbounded_channel();
-                    let (tx, rx) = mpsc::unbounded();
+                    let (tx, rx) = mpsc::unbounded_channel();
+                    //let (tx, rx) = mpsc::unbounded();
                     self.rx = Some(rx);
                     f(self, tx);
                 }
