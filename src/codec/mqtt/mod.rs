@@ -108,7 +108,7 @@ impl Decoder for MqttCodec {
                     let packet = read_packet(&mut packet_cur, fixed)?;
                     self.state = DecodeState::FrameHeader;
                     src.reserve(2);
-                    return Ok(None);
+                    return Ok(Some(packet));
                 }
             }
         }
