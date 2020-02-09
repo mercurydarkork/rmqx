@@ -75,8 +75,11 @@ async fn main() -> Result<()> {
                 );
             }
         };
-        let ctrlc = async { signal::ctrl_c().await };
-        let _ = join!(ctrlc, mqtt, mqtt_tls, wapi, mqtt_ws, mqtt_wss, coap);
+        let ctrlc = async {
+            signal::ctrl_c().await.unwrap();
+            println!("ctrl-c received!");
+        };
+        let _ = join!(mqtt, mqtt_tls, wapi, mqtt_ws, mqtt_wss, coap);
     };
     // signal::ctrl_c().await?;
     run.await;
