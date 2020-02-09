@@ -145,8 +145,10 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
             Ok((socket, addr)) => {
                 socket.set_nodelay(true)?;
                 socket.set_keepalive(Some(std::time::Duration::new(60, 0)))?;
+                socket.set_ttl(120)?;
                 tokio::spawn(async move {
-                    process(Peer::new(Framed::new(socket, MqttCodec::new())), addr).await
+                    process(Peer::new(Framed::new(socket, MqttCodec::new())), addr).await;
+                    println!("addr {} closed", &addr);
                 });
             }
             Err(e) => println!("error accepting socket; error = {:?}", e),
@@ -172,13 +174,7 @@ where
         })
         .await
     {
-        if let Err(e) = peer
-            .process_loop(|packet| -> bool {
-                drop(packet);
-                true
-            })
-            .await
-        {
+        if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await {
             println!(
                 "failed to process connection {} {}; error = {}",
                 peer.client_id, addr, e
