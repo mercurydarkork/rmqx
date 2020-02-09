@@ -68,16 +68,23 @@ where
     }
 
     async fn receive(&mut self) -> Result<Option<Message>> {
-        self.receive_timeout(self.keep_alive).await
+        match self.next().await {
+            Some(Ok(msg)) => {
+                //println!("recv: {} {:#?}", self.client_id, &msg);
+                Ok(Some(msg))
+            }
+            Some(Err(e)) => Err(e),
+            None => Ok(None),
+        }
     }
 
     async fn receive_timeout(&mut self, tm: Duration) -> Result<Option<Message>> {
-        match timeout(tm, self.transport.next()).await {
+        match timeout(tm, self.next()).await {
             Ok(Some(Ok(msg))) => {
                 //println!("recv: {} {:#?}", self.client_id, &msg);
-                Ok(Some(Message::Mqtt(msg)))
+                Ok(Some(msg))
             }
-            Ok(Some(Err(e))) => Err(Box::new(e)),
+            Ok(Some(Err(e))) => Err(e),
             Ok(None) => Ok(None),
             Err(_) => {
                 if self.from {
