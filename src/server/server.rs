@@ -148,7 +148,7 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
                 socket.set_ttl(120)?;
                 tokio::spawn(async move {
                     process(Peer::new(Framed::new(socket, MqttCodec::new())), addr).await;
-                    println!("addr {} closed", &addr);
+                    //println!("addr {} closed", &addr);
                 });
             }
             Err(e) => println!("error accepting socket; error = {:?}", e),
