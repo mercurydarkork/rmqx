@@ -68,50 +68,50 @@ impl Decoder for MqttCodec {
     type Error = ParseError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, ParseError> {
-        Ok(None)
-        // loop {
-        //     match self.state {
-        //         DecodeState::FrameHeader => {
-        //             if src.len() < 2 {
-        //                 return Ok(None);
-        //             }
-        //             let fixed = src.as_ref()[0];
-        //             match decode_variable_length(&src.as_ref()[1..])? {
-        //                 Some((remaining_length, consumed)) => {
-        //                     // if self.max_size != 0 && self.max_size < remaining_length {
-        //                     //     return Err(ParseError::MaxSizeExceeded);
-        //                     // }
-        //                     let _ = src.split_to(consumed + 1);
-        //                     self.state = DecodeState::Frame(FixedHeader {
-        //                         packet_type: fixed >> 4,
-        //                         packet_flags: fixed & 0xF,
-        //                         remaining_length,
-        //                     });
-        //                     // todo: validate remaining_length against max frame size config
-        //                     if src.len() < remaining_length {
-        //                         // todo: subtract?
-        //                         src.reserve(remaining_length); // extend receiving buffer to fit the whole frame -- todo: too eager?
-        //                         return Ok(None);
-        //                     }
-        //                 }
-        //                 None => {
-        //                     return Ok(None);
-        //                 }
-        //             }
-        //         }
-        //         DecodeState::Frame(fixed) => {
-        //             if src.len() < fixed.remaining_length {
-        //                 return Ok(None);
-        //             }
-        //             let packet_buf = src.split_to(fixed.remaining_length);
-        //             let mut packet_cur = Cursor::new(packet_buf.freeze());
-        //             let packet = read_packet(&mut packet_cur, fixed)?;
-        //             self.state = DecodeState::FrameHeader;
-        //             src.reserve(2);
-        //             return Ok(Some(packet));
-        //         }
-        //     }
-        // }
+        loop {
+            match self.state {
+                DecodeState::FrameHeader => {
+                    if src.len() < 2 {
+                        return Ok(None);
+                    }
+                    let src_slice = src.as_ref();
+                    let fixed = src_slice[0];
+                    match decode_variable_length(&src_slice[1..])? {
+                        Some((remaining_length, consumed)) => {
+                            // if self.max_size != 0 && self.max_size < remaining_length {
+                            //     return Err(ParseError::MaxSizeExceeded);
+                            // }
+                            let _ = src.split_to(consumed + 1);
+                            self.state = DecodeState::Frame(FixedHeader {
+                                packet_type: fixed >> 4,
+                                packet_flags: fixed & 0xF,
+                                remaining_length,
+                            });
+                            // todo: validate remaining_length against max frame size config
+                            if src.len() < remaining_length {
+                                // todo: subtract?
+                                src.reserve(remaining_length); // extend receiving buffer to fit the whole frame -- todo: too eager?
+                                return Ok(None);
+                            }
+                        }
+                        None => {
+                            return Ok(None);
+                        }
+                    }
+                }
+                DecodeState::Frame(fixed) => {
+                    if src.len() < fixed.remaining_length {
+                        return Ok(None);
+                    }
+                    let packet_buf = src.split_to(fixed.remaining_length).freeze();
+                    let mut packet_cur = Cursor::new(packet_buf);
+                    let packet = read_packet(&mut packet_cur, fixed)?;
+                    self.state = DecodeState::FrameHeader;
+                    src.reserve(2);
+                    return Ok(Some(packet));
+                }
+            }
+        }
     }
 }
 
