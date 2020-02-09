@@ -104,12 +104,11 @@ impl Decoder for MqttCodec {
                         return Ok(None);
                     }
                     let packet_buf = src.split_to(fixed.remaining_length).freeze();
-                    let mut packet_cur = Cursor::new(packet_buf.clone());
+                    let mut packet_cur = Cursor::new(packet_buf);
                     let packet = read_packet(&mut packet_cur, fixed)?;
                     self.state = DecodeState::FrameHeader;
-                    drop(packet_buf);
                     src.reserve(2);
-                    return Ok(Some(packet));
+                    return Ok(None);
                 }
             }
         }
