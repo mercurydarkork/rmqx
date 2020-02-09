@@ -74,7 +74,7 @@ where
     async fn receive_timeout(&mut self, tm: Duration) -> Result<Option<Message>> {
         match timeout(tm, self.next()).await {
             Ok(Some(Ok(msg))) => {
-                println!("recv: {} {:#?}", self.client_id, &msg);
+                //println!("recv: {} {:#?}", self.client_id, &msg);
                 Ok(Some(msg))
             }
             Ok(Some(Err(e))) => Err(e),
@@ -90,7 +90,7 @@ where
     }
 
     async fn send(&mut self, packet: Packet) -> Result<()> {
-        println!("peer.send: {} {:#?}", self.client_id, packet);
+        //println!("peer.send: {} {:#?}", self.client_id, packet);
         if let Err(e) = self.transport.send(packet).await {
             return Err(Box::new(e));
         }
