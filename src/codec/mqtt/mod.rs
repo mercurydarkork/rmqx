@@ -37,9 +37,10 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub struct MqttCodec {
     state: DecodeState,
+    addr: std::net::SocketAddr,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -49,17 +50,11 @@ enum DecodeState {
 }
 
 impl MqttCodec {
-    /// Create `Codec` instance
-    pub fn new() -> Self {
+    pub fn new(addr: std::net::SocketAddr) -> Self {
         Self {
             state: DecodeState::FrameHeader,
+            addr: addr,
         }
-    }
-}
-
-impl Default for MqttCodec {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -108,7 +103,6 @@ impl Decoder for MqttCodec {
                     let packet = read_packet(&mut packet_cur, fixed)?;
                     self.state = DecodeState::FrameHeader;
                     src.reserve(2);
-                    //println!("capacity {}", src.capacity());
                     return Ok(Some(packet));
                 }
             }
@@ -142,4 +136,10 @@ pub(crate) struct FixedHeader {
     /// the number of bytes remaining within the current packet,
     /// including data in the variable header and the payload.
     pub remaining_length: usize,
+}
+
+impl Drop for MqttCodec {
+    fn drop(&mut self) {
+        println!("drop {} mqtt codec", self.addr);
+    }
 }

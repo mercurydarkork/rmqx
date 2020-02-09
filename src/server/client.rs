@@ -27,7 +27,8 @@ impl Client {
         loop {
             match TcpStream::connect(addr.as_ref()).await {
                 Ok(socket) => {
-                    let codec = Framed::new(socket, MqttCodec::new());
+                    let paddr = socket.peer_addr().unwrap();
+                    let codec = Framed::new(socket, MqttCodec::new(paddr));
                     let mut peer = Peer::from(&client_id, codec);
                     peer.set_keep_alive(Duration::from_secs(30));
                     let mut c = Client { tx: None };

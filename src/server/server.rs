@@ -142,7 +142,6 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
     use tokio::time::delay_for;
     let mut listener = TcpListener::bind(laddr.as_ref()).await?;
     println!("mqtt listen on {}", laddr.as_ref());
-    let mcodec = MqttCodec::new();
     loop {
         match listener.accept().await {
             Ok((socket, addr)) => {
@@ -150,8 +149,11 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
                 socket.set_keepalive(Some(std::time::Duration::new(60, 0)))?;
                 socket.set_ttl(120)?;
                 tokio::spawn(async move {
-                    process(Peer::new(Framed::new(socket, mcodec)), addr).await;
-                    //println!("addr {} closed", &addr);
+                    process(
+                        Peer::new(Framed::new(socket, MqttCodec::new(addr.clone()))),
+                        addr,
+                    )
+                    .await;
                 });
             }
             Err(e) => println!("error accepting socket; error = {:?}", e),
