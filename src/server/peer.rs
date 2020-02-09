@@ -190,7 +190,9 @@ where
                 Ok(Some(msg)) => {
                     drop(msg);
                 }
-                Ok(None) => {}
+                Ok(None) => {
+                    println!("receive none");
+                }
                 // Ok(Some(Message::Forward(publish))) => self.publish(publish).await?,
                 // Ok(Some(Message::Mqtt(Packet::Publish(publish)))) => {
                 //     if publish.qos == QoS::AtLeastOnce {
