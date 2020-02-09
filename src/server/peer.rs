@@ -243,7 +243,9 @@ where
                     //todo 处理异常数据包
                     return Ok(());
                 }
-                Ok(Some(Message::Mqtt(_))) => {}
+                Ok(Some(Message::Mqtt(packet))) => {
+                    println!("mqtt packet {:#?}", packet);
+                }
                 Ok(Some(Message::KeepAlive)) => {
                     self.send_ping().await?;
                 }
