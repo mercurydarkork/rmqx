@@ -8,8 +8,8 @@ use crate::server::*;
 use bytes::Buf;
 use bytestring::ByteString;
 use coap::{IsMessage, Method, Server};
-use futures::{SinkExt, StreamExt};
-//use futures::{channel::mpsc, SinkExt, StreamExt};
+//use futures::{SinkExt, StreamExt};
+use futures::{channel::mpsc, SinkExt, StreamExt};
 //use native_tls::Identity;
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -18,7 +18,7 @@ use std::sync::Arc;
 use tokio::fs;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpListener;
-use tokio::sync::mpsc;
+//use tokio::sync::mpsc;
 use tokio::time::Duration;
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
@@ -142,6 +142,7 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
     use tokio::time::delay_for;
     let mut listener = TcpListener::bind(laddr.as_ref()).await?;
     println!("mqtt listen on {}", laddr.as_ref());
+    let mcodec = MqttCodec::new();
     loop {
         match listener.accept().await {
             Ok((socket, addr)) => {
@@ -149,7 +150,7 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
                 socket.set_keepalive(Some(std::time::Duration::new(60, 0)))?;
                 socket.set_ttl(120)?;
                 tokio::spawn(async move {
-                    process(Peer::new(Framed::new(socket, MqttCodec::new())), addr).await;
+                    process(Peer::new(Framed::new(socket, mcodec)), addr).await;
                     //println!("addr {} closed", &addr);
                 });
             }
@@ -213,64 +214,6 @@ lazy_static! {
     static ref state: Arc<Shared> = Arc::new(Shared::new());
 }
 
-impl Shared {
-    fn new() -> Self {
-        Shared {
-            peers: RwLock::new(HashMap::new()),
-        }
-    }
-
-    pub fn client_num(&self) -> usize {
-        self.peers.read().len()
-    }
-
-    pub fn exist(&self, client_id: &str) -> bool {
-        self.peers.read().contains_key(client_id)
-    }
-
-    pub fn kick(&self, client_id: &str) {
-        if let Some(tx) = self.peers.write().remove(client_id) {
-            let _ = tx.send(Message::Kick);
-            drop(tx);
-        }
-    }
-
-    pub fn add_peer(&self, client_id: ByteString, tx: Tx) {
-        self.peers.write().insert(client_id, tx);
-    }
-
-    pub fn remove_peer(&self, client_id: &str) {
-        if let Some(tx) = self.peers.write().remove(client_id) {
-            drop(tx);
-        }
-    }
-
-    pub async fn broadcast(&self, publish: Publish) {
-        for peer in self.peers.read().iter() {
-            if let Err(e) = peer.1.send(Message::Forward(publish.clone())) {
-                println!("broadcast {} {}", peer.0, e);
-            }
-        }
-    }
-    pub async fn forward(&self, client_id: &str, publish: Publish) -> Result<()> {
-        if let Some(tx) = self.peers.read().get(client_id) {
-            if let Err(_e) = tx.send(Message::Forward(publish)) {
-                return Err(Box::new(ParseError::InvalidClientId));
-            }
-        }
-        Ok(())
-    }
-
-    pub async fn send(&self, client_id: &str, msg: Message) -> Result<()> {
-        if let Some(tx) = self.peers.read().get(client_id) {
-            if let Err(_e) = tx.send(msg) {
-                return Err(Box::new(ParseError::InvalidClientId));
-            }
-        }
-        Ok(())
-    }
-}
-
 // impl Shared {
 //     fn new() -> Self {
 //         Shared {
@@ -287,7 +230,7 @@ impl Shared {
 //     }
 
 //     pub fn kick(&self, client_id: &str) {
-//         if let Some(mut tx) = self.peers.write().remove(client_id) {
+//         if let Some(tx) = self.peers.write().remove(client_id) {
 //             let _ = tx.send(Message::Kick);
 //             drop(tx);
 //         }
@@ -303,24 +246,82 @@ impl Shared {
 //         }
 //     }
 
-//     pub async fn broadcast(&self, publish: Publish) -> Result<()> {
+//     pub async fn broadcast(&self, publish: Publish) {
 //         for peer in self.peers.read().iter() {
-//             let mut tx = peer.1;
-//             tx.send(Message::Forward(publish.clone())).await?;
+//             if let Err(e) = peer.1.send(Message::Forward(publish.clone())) {
+//                 println!("broadcast {} {}", peer.0, e);
+//             }
 //         }
-//         Ok(())
 //     }
 //     pub async fn forward(&self, client_id: &str, publish: Publish) -> Result<()> {
-//         if let Some(mut tx) = self.peers.read().get(client_id) {
-//             tx.send(Message::Forward(publish)).await?;
+//         if let Some(tx) = self.peers.read().get(client_id) {
+//             if let Err(_e) = tx.send(Message::Forward(publish)) {
+//                 return Err(Box::new(ParseError::InvalidClientId));
+//             }
 //         }
 //         Ok(())
 //     }
 
 //     pub async fn send(&self, client_id: &str, msg: Message) -> Result<()> {
-//         if let Some(mut tx) = self.peers.read().get(client_id) {
-//             tx.send(msg).await?;
+//         if let Some(tx) = self.peers.read().get(client_id) {
+//             if let Err(_e) = tx.send(msg) {
+//                 return Err(Box::new(ParseError::InvalidClientId));
+//             }
 //         }
 //         Ok(())
 //     }
 // }
+
+impl Shared {
+    fn new() -> Self {
+        Shared {
+            peers: RwLock::new(HashMap::new()),
+        }
+    }
+
+    pub fn client_num(&self) -> usize {
+        self.peers.read().len()
+    }
+
+    pub fn exist(&self, client_id: &str) -> bool {
+        self.peers.read().contains_key(client_id)
+    }
+
+    pub fn kick(&self, client_id: &str) {
+        if let Some(mut tx) = self.peers.write().remove(client_id) {
+            let _ = tx.send(Message::Kick);
+            drop(tx);
+        }
+    }
+
+    pub fn add_peer(&self, client_id: ByteString, tx: Tx) {
+        self.peers.write().insert(client_id, tx);
+    }
+
+    pub fn remove_peer(&self, client_id: &str) {
+        if let Some(tx) = self.peers.write().remove(client_id) {
+            drop(tx);
+        }
+    }
+
+    pub async fn broadcast(&self, publish: Publish) -> Result<()> {
+        for peer in self.peers.read().iter() {
+            let mut tx = peer.1;
+            tx.send(Message::Forward(publish.clone())).await?;
+        }
+        Ok(())
+    }
+    pub async fn forward(&self, client_id: &str, publish: Publish) -> Result<()> {
+        if let Some(mut tx) = self.peers.read().get(client_id) {
+            tx.send(Message::Forward(publish)).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn send(&self, client_id: &str, msg: Message) -> Result<()> {
+        if let Some(mut tx) = self.peers.read().get(client_id) {
+            tx.send(msg).await?;
+        }
+        Ok(())
+    }
+}

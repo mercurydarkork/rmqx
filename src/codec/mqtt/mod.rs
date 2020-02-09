@@ -37,7 +37,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct MqttCodec {
     state: DecodeState,
 }
