@@ -140,6 +140,6 @@ pub(crate) struct FixedHeader {
 
 impl Drop for MqttCodec {
     fn drop(&mut self) {
-        println!("drop {} mqtt codec", self.addr);
+        // println!("drop {} mqtt codec", self.addr);
     }
 }

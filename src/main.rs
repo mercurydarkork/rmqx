@@ -1,4 +1,8 @@
 #![allow(dead_code)]
+#[cfg(unix)]
+#[cfg(feature = "alloc-jemalloc")]
+extern crate jemallocator;
+
 #[macro_use]
 extern crate bitflags;
 #[macro_use]
@@ -9,6 +13,11 @@ extern crate serde_json;
 extern crate serde_derive;
 #[macro_use]
 extern crate futures;
+
+#[cfg(unix)]
+#[cfg(feature = "alloc-jemalloc")]
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 mod codec;
 mod options;
