@@ -63,9 +63,6 @@ impl Client {
 
     pub async fn publish(&self, publish: Publish) -> Result<()> {
         if let Some(tx) = &self.tx {
-            // if let Err(_e) = tx.send(Message::Forward(publish)) {
-            //     return Err(Box::new(ParseError::InvalidClientId));
-            // }
             let mut tx = tx;
             tx.send(Message::Forward(publish)).await?;
         }
