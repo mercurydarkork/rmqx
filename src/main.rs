@@ -8,11 +8,13 @@ static GLOBAL: Jemalloc = Jemalloc;
 // #[cfg(unix)]
 // #[cfg(feature = "alloc-jemalloc")]
 // extern crate jemallocator;
-
+extern crate config;
 #[macro_use]
 extern crate bitflags;
 #[macro_use]
 extern crate lazy_static;
+// #[macro_use]
+// extern crate serde;
 #[macro_use]
 extern crate serde_json;
 #[macro_use]
@@ -33,6 +35,7 @@ mod webhook;
 use crate::server::*;
 use options::Options;
 use std::*;
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let options = Options::new().unwrap();

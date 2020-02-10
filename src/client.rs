@@ -2,12 +2,14 @@
 #![allow(unused_imports)]
 #![allow(non_upper_case_globals)]
 #![allow(dead_code)]
+
+extern crate config;
 #[macro_use]
 extern crate bitflags;
 #[macro_use]
 extern crate lazy_static;
-#[macro_use]
-extern crate serde;
+// #[macro_use]
+// extern crate serde;
 #[macro_use]
 extern crate serde_json;
 #[macro_use]

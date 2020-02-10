@@ -63,7 +63,7 @@ where
         }
     }
 
-    pub fn set_keep_alive(&mut self, keep_alive: Duration) {
+    pub fn set_keepalive(&mut self, keep_alive: Duration) {
         self.keep_alive = keep_alive
     }
 
@@ -79,13 +79,7 @@ where
             }
             Ok(Some(Err(e))) => Err(e),
             Ok(None) => Ok(None),
-            Err(_) => {
-                if self.from {
-                    Ok(Some(Message::KeepAlive))
-                } else {
-                    Err(Box::new(ParseError::Timeout(self.keep_alive)))
-                }
-            }
+            Err(_) => Ok(Some(Message::Timeout(tm))),
         }
     }
 
@@ -185,148 +179,79 @@ where
     where
         F: Fn(&Packet) -> bool,
     {
-        // loop {
-        //     match self.receive().await {
-        //         Ok(Some(Message::Forward(publish))) => self.publish(publish).await?,
-        //         Ok(Some(Message::Mqtt(Packet::Publish(publish)))) => {
-        //             if publish.qos == QoS::AtLeastOnce {
-        //                 self.send_publish_ack(publish.packet_id.unwrap()).await?;
-        //                 f(&Packet::Publish(publish));
-        //             } else if publish.qos == QoS::ExactlyOnce {
-        //                 self.send_publish_received(publish.packet_id.unwrap())
-        //                     .await?;
-        //             }
-        //         }
-        //         Ok(Some(Message::Mqtt(Packet::PublishRelease { packet_id }))) => {
-        //             self.send_publish_complete(packet_id).await?;
-        //             f(&Packet::PublishRelease { packet_id });
-        //         }
-        //         Ok(Some(Message::Mqtt(Packet::PublishReceived { packet_id }))) => {
-        //             self.send_publish_release(packet_id).await?;
-        //         }
-        //         Ok(Some(Message::Mqtt(Packet::PublishAck { packet_id }))) => {
-        //             f(&Packet::PublishAck { packet_id });
-        //         }
-        //         Ok(Some(Message::Mqtt(Packet::Disconnect))) => {
-        //             f(&Packet::Disconnect);
-        //         }
-        //         Ok(Some(Message::Mqtt(Packet::PublishComplete { packet_id }))) => {
-        //             f(&Packet::PublishComplete { packet_id });
-        //         }
-        //         Ok(Some(Message::Mqtt(Packet::Subscribe {
-        //             packet_id,
-        //             topic_filters,
-        //         }))) => {
-        //             if f(&Packet::Subscribe {
-        //                 packet_id,
-        //                 topic_filters,
-        //             }) {
-        //                 self.send_subscribe_ack(packet_id).await?;
-        //             }
-        //             //todo 订阅失败处理
-        //         }
-        //         Ok(Some(Message::Mqtt(Packet::Unsubscribe {
-        //             packet_id,
-        //             topic_filters,
-        //         }))) => {
-        //             self.send_unsubscribe_ack(packet_id).await?;
-        //             f(&Packet::Unsubscribe {
-        //                 packet_id,
-        //                 topic_filters,
-        //             });
-        //         }
-        //         Ok(Some(Message::Mqtt(Packet::PingRequest))) => self.send_pong().await?,
-        //         Ok(Some(Message::Mqtt(Packet::Connect(_)))) => {
-        //             self.send_connect_ack(false, ConnectCode::NotAuthorized)
-        //                 .await?;
-        //             self.send_disconnect().await?;
-        //             //todo 处理异常数据包
-        //             return Ok(());
-        //         }
-        //         Ok(Some(Message::Mqtt(packet))) => {
-        //             println!("mqtt packet {:#?}", packet);
-        //         }
-        //         Ok(Some(Message::KeepAlive)) => {
-        //             self.send_ping().await?;
-        //         }
-        //         Ok(Some(Message::Kick)) | Ok(None) => return Ok(()), //被踢掉或者连接断开了
-        //         Err(e) => return Err(e),
-        //     }
-        // }
-
-        while let Ok(result) = self.receive().await {
-            if let Some(msg) = result {
-                match msg {
-                    Message::KeepAlive => {
+        while let Ok(Some(msg)) = self.receive().await {
+            match msg {
+                Message::Timeout(..) => {
+                    if self.from {
                         self.send_ping().await?;
+                    } else {
+                        return Ok(());
                     }
-                    Message::Kick => return Ok(()), //被踢掉或者连接断开了
-                    Message::Forward(publish) => self.publish(publish).await?,
-                    Message::Mqtt(packet) => {
-                        match packet {
-                            Packet::Publish(publish) => {
-                                if publish.qos == QoS::AtLeastOnce {
-                                    self.send_publish_ack(publish.packet_id.unwrap()).await?;
-                                    f(&Packet::Publish(publish));
-                                } else if publish.qos == QoS::ExactlyOnce {
-                                    self.send_publish_received(publish.packet_id.unwrap())
-                                        .await?;
-                                }
-                            }
-                            Packet::PublishRelease { packet_id } => {
-                                self.send_publish_complete(packet_id).await?;
-                                f(&Packet::PublishRelease { packet_id });
-                            }
-                            Packet::PublishReceived { packet_id } => {
-                                self.send_publish_release(packet_id).await?;
-                            }
-                            Packet::PublishAck { packet_id } => {
-                                f(&Packet::PublishAck { packet_id });
-                            }
-                            Packet::Disconnect => {
-                                f(&Packet::Disconnect);
-                            }
-                            Packet::PublishComplete { packet_id } => {
-                                f(&Packet::PublishComplete { packet_id });
-                            }
-                            Packet::Subscribe {
-                                packet_id,
-                                topic_filters,
-                            } => {
-                                if f(&Packet::Subscribe {
-                                    packet_id,
-                                    topic_filters,
-                                }) {
-                                    self.send_subscribe_ack(packet_id).await?;
-                                }
-                                //todo 订阅失败处理
-                            }
-                            Packet::Unsubscribe {
-                                packet_id,
-                                topic_filters,
-                            } => {
-                                self.send_unsubscribe_ack(packet_id).await?;
-                                f(&Packet::Unsubscribe {
-                                    packet_id,
-                                    topic_filters,
-                                });
-                            }
-                            Packet::PingRequest => self.send_pong().await?,
-                            Packet::Connect(_) => {
-                                self.send_connect_ack(false, ConnectCode::NotAuthorized)
+                }
+                Message::Kick => return Ok(()), //被踢掉或者连接断开了
+                Message::Forward(publish) => self.publish(publish).await?,
+                Message::Mqtt(packet) => {
+                    match packet {
+                        Packet::Publish(publish) => {
+                            if publish.qos == QoS::AtLeastOnce {
+                                self.send_publish_ack(publish.packet_id.unwrap()).await?;
+                                f(&Packet::Publish(publish));
+                            } else if publish.qos == QoS::ExactlyOnce {
+                                self.send_publish_received(publish.packet_id.unwrap())
                                     .await?;
-                                self.send_disconnect().await?;
-                                //todo 处理异常数据包
-                                return Ok(());
                             }
-                            packet => {
-                                println!("mqtt packet {:#?}", packet);
+                        }
+                        Packet::PublishRelease { packet_id } => {
+                            self.send_publish_complete(packet_id).await?;
+                            f(&Packet::PublishRelease { packet_id });
+                        }
+                        Packet::PublishReceived { packet_id } => {
+                            self.send_publish_release(packet_id).await?;
+                        }
+                        Packet::PublishAck { packet_id } => {
+                            f(&Packet::PublishAck { packet_id });
+                        }
+                        Packet::Disconnect => {
+                            f(&Packet::Disconnect);
+                        }
+                        Packet::PublishComplete { packet_id } => {
+                            f(&Packet::PublishComplete { packet_id });
+                        }
+                        Packet::Subscribe {
+                            packet_id,
+                            topic_filters,
+                        } => {
+                            if f(&Packet::Subscribe {
+                                packet_id,
+                                topic_filters,
+                            }) {
+                                self.send_subscribe_ack(packet_id).await?;
                             }
+                            //todo 订阅失败处理
+                        }
+                        Packet::Unsubscribe {
+                            packet_id,
+                            topic_filters,
+                        } => {
+                            self.send_unsubscribe_ack(packet_id).await?;
+                            f(&Packet::Unsubscribe {
+                                packet_id,
+                                topic_filters,
+                            });
+                        }
+                        Packet::PingRequest => self.send_pong().await?,
+                        Packet::Connect(_) => {
+                            self.send_connect_ack(false, ConnectCode::NotAuthorized)
+                                .await?;
+                            self.send_disconnect().await?;
+                            //todo 处理异常数据包
+                            return Ok(());
+                        }
+                        packet => {
+                            println!("mqtt packet {:#?}", packet);
                         }
                     }
                 }
-            } else {
-                return Ok(());
             }
         }
         Ok(())

@@ -1,6 +1,6 @@
 use config::{Config, ConfigError, Environment, File};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Listener {
     pub mqtt_laddr: String,
     pub mqtt_tls_laddr: Option<String>,
@@ -11,17 +11,17 @@ pub struct Listener {
     pub p12_file: Option<String>,
     pub p12_passwd: Option<String>,
 }
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Limiter {
     pub max_conns: u32,                   //最大连接数
     pub max_conn_pre_second: Option<u32>, //每秒连接速率
 }
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Authentication {
     pub method: String, //anonymous｜webhook
     pub file_path: Option<String>,
 }
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Webhook {
     pub on_connect: Option<String>,
     pub on_disconnect: Option<String>,
@@ -33,7 +33,7 @@ pub struct Webhook {
     pub on_kick: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Options {
     pub listener: Listener,
     pub limiter: Limiter,
