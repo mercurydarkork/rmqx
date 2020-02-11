@@ -28,6 +28,7 @@ extern crate futures;
 // static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 mod codec;
+mod limiter;
 mod options;
 mod server;
 mod webhook;

@@ -13,8 +13,9 @@ pub struct Listener {
 }
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Limiter {
-    pub max_conns: u32,                   //最大连接数
-    pub max_conn_pre_second: Option<u32>, //每秒连接速率
+    pub max_conns: u32,                 //最大连接数
+    pub accept_per_second: Option<u32>, //每秒连接速率
+    pub client_per_second: Option<u32>,
 }
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Authentication {

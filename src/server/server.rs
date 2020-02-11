@@ -11,7 +11,8 @@ use coap::{IsMessage, Method, Server};
 use futures::{channel::mpsc, SinkExt, StreamExt};
 use native_tls::Identity;
 use parking_lot::RwLock;
-use std::collections::HashMap;
+//use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::fs;
@@ -210,7 +211,7 @@ pub type Tx = mpsc::UnboundedSender<Message>;
 pub type Rx = mpsc::UnboundedReceiver<Message>;
 
 pub struct Shared {
-    peers: RwLock<HashMap<ByteString, Tx>>,
+    peers: RwLock<BTreeMap<ByteString, Tx>>,
 }
 
 lazy_static! {
@@ -278,7 +279,7 @@ lazy_static! {
 impl Shared {
     fn new() -> Self {
         Shared {
-            peers: RwLock::new(HashMap::new()),
+            peers: RwLock::new(BTreeMap::new()),
         }
     }
 
