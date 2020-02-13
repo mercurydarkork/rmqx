@@ -6,12 +6,14 @@ mod proto;
 mod decode;
 mod encode;
 mod packet;
+mod stream;
 
 pub use self::decode::*;
 pub use self::encode::*;
 pub use self::error::*;
 pub use self::packet::*;
 pub use self::proto::*;
+pub use self::stream::*;
 pub use self::topic::*;
 
 use bytes::BytesMut;
@@ -40,7 +42,6 @@ bitflags! {
 #[derive(Debug)]
 pub struct MqttCodec {
     state: DecodeState,
-    addr: std::net::SocketAddr,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -50,19 +51,18 @@ enum DecodeState {
 }
 
 impl MqttCodec {
-    pub fn new(addr: std::net::SocketAddr) -> Self {
+    pub fn new() -> Self {
         Self {
             state: DecodeState::FrameHeader,
-            addr: addr,
         }
     }
 }
 
 impl Decoder for MqttCodec {
     type Item = Packet;
-    type Error = ParseError;
+    type Error = MqttError;
 
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, ParseError> {
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, MqttError> {
         loop {
             match self.state {
                 DecodeState::FrameHeader => {
@@ -74,7 +74,7 @@ impl Decoder for MqttCodec {
                     match decode_variable_length(&src_slice[1..])? {
                         Some((remaining_length, consumed)) => {
                             // if self.max_size != 0 && self.max_size < remaining_length {
-                            //     return Err(ParseError::MaxSizeExceeded);
+                            //     return Err(MqttError::MaxSizeExceeded);
                             // }
                             let _ = src.split_to(consumed + 1);
                             self.state = DecodeState::Frame(FixedHeader {
@@ -112,12 +112,12 @@ impl Decoder for MqttCodec {
 
 impl Encoder for MqttCodec {
     type Item = Packet;
-    type Error = ParseError;
+    type Error = MqttError;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), ParseError> {
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), MqttError> {
         if let Packet::Publish(Publish { qos, packet_id, .. }) = item {
             if (qos == QoS::AtLeastOnce || qos == QoS::ExactlyOnce) && packet_id.is_none() {
-                return Err(ParseError::PacketIdRequired);
+                return Err(MqttError::PacketIdRequired);
             }
         }
         let content_size = get_encoded_size(&item);

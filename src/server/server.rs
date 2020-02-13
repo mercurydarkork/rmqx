@@ -6,19 +6,22 @@
 use crate::codec::mqtt::*;
 use crate::server::*;
 use bytes::Buf;
+use bytes::BufMut;
 use bytestring::ByteString;
+use chrono::prelude::*;
 use coap::{IsMessage, Method, Server};
 use futures::{channel::mpsc, SinkExt, StreamExt};
 use native_tls::Identity;
 use parking_lot::RwLock;
-//use std::collections::HashMap;
 use std::collections::BTreeMap;
+use std::fmt::Write;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpListener;
-//use tokio::sync::mpsc;
+use tokio::stream::Stream;
+use tokio::time::delay_for;
 use tokio::time::Duration;
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
@@ -90,7 +93,7 @@ pub async fn serve_webapi<T: AsRef<str>>(laddr: T) -> Result<()> {
     }
     let make_service = make_service_fn(|_conn| async { Ok::<_, Error>(service_fn(handle)) });
     let server = Server::bind(&laddr).serve(make_service);
-    println!("webapi listen on {}", laddr);
+    println!("{} webapi listen on {}", Local::now(), laddr);
     if let Err(e) = server.await {
         eprintln!("server error: {}", e);
     }
@@ -115,22 +118,25 @@ pub async fn serve_tls<T: AsRef<str>, U: AsRef<std::path::Path>, W: AsRef<str>>(
     let cert = Identity::from_pkcs12(&der, passwd.as_ref())?;
     let tls_acceptor =
         tokio_tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(cert).build()?);
-    println!("mqtt.tls listen on {}", laddr.as_ref());
+    println!("{} mqtt.tls listen on {}", Local::now(), laddr.as_ref());
     loop {
         match listener.accept().await {
             Ok((socket, addr)) => {
                 socket.set_nodelay(true)?;
-                socket.set_keepalive(None)?;
-                socket.set_recv_buffer_size(4096)?;
-                socket.set_send_buffer_size(4096)?;
+                socket.set_keepalive(Some(std::time::Duration::new(60, 0)))?; //启用发送TCP KEEPALIVE数据包
+                socket.set_ttl(15)?; //发送数据包的生存时间
                 let tls_acceptor = tls_acceptor.clone();
                 tokio::spawn(async move {
                     if let Ok(socket) = tls_acceptor.accept(socket).await {
-                        process(
-                            Peer::new(Framed::new(socket, MqttCodec::new(addr.clone()))),
-                            addr,
-                        )
+                        if let Ok(stream) = MqttStream::accept(socket, |conn| -> bool {
+                            println!("on connect {:#?}", conn);
+                            true
+                        })
                         .await
+                        {
+                            process(Peer::new(stream, addr)).await
+                        }
+                        //process(Peer::new(Framed::new(socket, MqttCodec::new())), addr).await
                     }
                 });
             }
@@ -140,23 +146,34 @@ pub async fn serve_tls<T: AsRef<str>, U: AsRef<std::path::Path>, W: AsRef<str>>(
 }
 
 pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
-    use bytes::BufMut;
-    use std::fmt::Write;
-    use tokio::time::delay_for;
     let mut listener = TcpListener::bind(laddr.as_ref()).await?;
-    println!("mqtt listen on {}", laddr.as_ref());
+    println!("{} mqtt listen on {}", Local::now(), laddr.as_ref());
     loop {
         match listener.accept().await {
             Ok((socket, addr)) => {
                 socket.set_nodelay(true)?;
-                socket.set_keepalive(Some(std::time::Duration::new(60, 0)))?;
-                socket.set_ttl(120)?;
+                socket.set_keepalive(Some(std::time::Duration::new(60, 0)))?; //启用发送TCP KEEPALIVE数据包
+                socket.set_ttl(15)?; //发送数据包的生存时间
                 tokio::spawn(async move {
-                    process(
-                        Peer::new(Framed::new(socket, MqttCodec::new(addr.clone()))),
-                        addr,
-                    )
-                    .await;
+                    let mut connect = None;
+                    if let Ok(stream) = MqttStream::accept(socket, |conn| -> bool {
+                        println!("on connect {:#?}", conn);
+                        connect = Some(conn);
+                        true
+                    })
+                    .await
+                    {
+                        if let Some(conn) = connect {
+                            let mut peer = Peer::new(stream, addr);
+                            peer.client_id = conn.client_id;
+                            peer.keep_alive = Duration::from_secs((conn.keep_alive + 5) as u64);
+                            peer.last_will = conn.last_will;
+                            peer.clean_session = conn.clean_session;
+                            peer.username = conn.username;
+                            peer.password = conn.password;
+                            process(peer).await
+                        }
+                    }
                 });
             }
             Err(e) => println!("error accepting socket; error = {:?}", e),
@@ -164,32 +181,28 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
     }
 }
 
-async fn process<T, U>(peer: Peer<T, U>, addr: SocketAddr)
+async fn process<T>(peer: Peer<T>)
 where
     T: AsyncRead + AsyncWrite + Unpin,
-    U: Decoder<Item = Packet, Error = ParseError>,
-    U: Encoder<Item = Packet, Error = ParseError>,
 {
     let mut peer = peer;
-    peer.set_keepalive(Duration::from_secs(60));
-    if let Ok(()) = peer
-        .handshake(|conn, tx| -> bool {
-            if *&state.exist(&conn.client_id) {
-                &state.kick(&conn.client_id);
-            }
-            &state.add_peer(conn.client_id.clone(), tx);
+    if let Err(e) = peer
+        .evloop(|packet| -> bool {
+            println!("on packet {:#?}", packet);
             true
         })
         .await
     {
-        if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await {
-            println!(
-                "failed to process connection {} {}; error = {}",
-                peer.client_id, addr, e
-            );
-        }
-        &state.remove_peer(&peer.client_id);
+        println!(
+            "failed to process connection {} {}; error = {}",
+            peer.client_id, peer.remote_addr, e
+        );
     }
+    &state.remove_peer(&peer.client_id);
+    println!(
+        "exit to process connection {} {}",
+        peer.client_id, peer.remote_addr
+    );
     drop(peer);
 }
 
@@ -217,64 +230,6 @@ pub struct Shared {
 lazy_static! {
     static ref state: Arc<Shared> = Arc::new(Shared::new());
 }
-
-// impl Shared {
-//     fn new() -> Self {
-//         Shared {
-//             peers: RwLock::new(HashMap::new()),
-//         }
-//     }
-
-//     pub fn client_num(&self) -> usize {
-//         self.peers.read().len()
-//     }
-
-//     pub fn exist(&self, client_id: &str) -> bool {
-//         self.peers.read().contains_key(client_id)
-//     }
-
-//     pub fn kick(&self, client_id: &str) {
-//         if let Some(tx) = self.peers.write().remove(client_id) {
-//             let _ = tx.send(Message::Kick);
-//             drop(tx);
-//         }
-//     }
-
-//     pub fn add_peer(&self, client_id: ByteString, tx: Tx) {
-//         self.peers.write().insert(client_id, tx);
-//     }
-
-//     pub fn remove_peer(&self, client_id: &str) {
-//         if let Some(tx) = self.peers.write().remove(client_id) {
-//             drop(tx);
-//         }
-//     }
-
-//     pub async fn broadcast(&self, publish: Publish) {
-//         for peer in self.peers.read().iter() {
-//             if let Err(e) = peer.1.send(Message::Forward(publish.clone())) {
-//                 println!("broadcast {} {}", peer.0, e);
-//             }
-//         }
-//     }
-//     pub async fn forward(&self, client_id: &str, publish: Publish) -> Result<()> {
-//         if let Some(tx) = self.peers.read().get(client_id) {
-//             if let Err(_e) = tx.send(Message::Forward(publish)) {
-//                 return Err(Box::new(ParseError::InvalidClientId));
-//             }
-//         }
-//         Ok(())
-//     }
-
-//     pub async fn send(&self, client_id: &str, msg: Message) -> Result<()> {
-//         if let Some(tx) = self.peers.read().get(client_id) {
-//             if let Err(_e) = tx.send(msg) {
-//                 return Err(Box::new(ParseError::InvalidClientId));
-//             }
-//         }
-//         Ok(())
-//     }
-// }
 
 impl Shared {
     fn new() -> Self {

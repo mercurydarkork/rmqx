@@ -12,53 +12,62 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite};
 //use tokio::sync::mpsc;
+use crate::codec::mqtt::*;
+use crate::server::*;
 use futures::channel::mpsc;
+use std::net::SocketAddr;
 use tokio::time::{timeout, Duration};
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
-use crate::codec::mqtt::*;
-use crate::server::*;
-
-pub struct Peer<T, U> {
-    transport: Framed<T, U>,
+pub struct Peer<T> {
+    pub remote_addr: SocketAddr,
     pub client_id: ByteString,
     pub keep_alive: Duration,
     pub clean_session: bool,
     pub last_will: Option<LastWill>,
+    pub username: Option<ByteString>,
+    pub password: Option<Bytes>,
     pub rx: Option<Rx>,
     pub tx: Option<Tx>,
+    stream: MqttStream<T>,
     from: bool,
     // state: Arc<Shared>,
 }
 
-impl<T, U> Peer<T, U>
+impl<T> Peer<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
-    U: Decoder<Item = Packet, Error = ParseError>,
-    U: Encoder<Item = Packet, Error = ParseError>,
 {
-    pub fn new(transport: Framed<T, U>) -> Self {
+    pub fn new(stream: MqttStream<T>, addr: SocketAddr) -> Self {
+        let (tx, rx) = mpsc::unbounded();
         Self {
-            transport: transport,
+            remote_addr: addr,
+            stream: stream,
             client_id: ByteString::new(),
             keep_alive: Duration::from_secs(60),
             clean_session: false,
             last_will: None,
-            rx: None,
-            tx: None,
+            username: None,
+            password: None,
+            rx: Some(rx),
+            tx: Some(tx),
             from: false,
         }
     }
 
-    pub fn from(client_id: &str, transport: Framed<T, U>) -> Self {
+    pub fn from(client_id: &str, stream: MqttStream<T>, addr: SocketAddr) -> Self {
+        let (tx, rx) = mpsc::unbounded();
         Self {
-            transport: transport,
+            remote_addr: addr,
+            stream: stream,
             client_id: ByteString::from(client_id),
             keep_alive: Duration::from_secs(60),
             clean_session: false,
             last_will: None,
-            rx: None,
-            tx: None,
+            username: None,
+            password: None,
+            rx: Some(rx),
+            tx: Some(tx),
             from: true,
         }
     }
@@ -85,7 +94,7 @@ where
 
     async fn send(&mut self, packet: Packet) -> Result<()> {
         //println!("peer.send: {} {:#?}", self.client_id, packet);
-        if let Err(e) = self.transport.send(packet).await {
+        if let Err(e) = self.stream.send(packet).await {
             return Err(Box::new(e));
         }
         Ok(())
@@ -93,7 +102,7 @@ where
 
     async fn send_timeout(&mut self, packet: Packet, tm: Duration) -> Result<()> {
         //println!("peer.send: {} {:#?}", self.client_id, packet);
-        if let Err(e) = timeout(tm, self.transport.send(packet)).await {
+        if let Err(e) = timeout(tm, self.stream.send(packet)).await {
             return Err(Box::new(e));
         }
         Ok(())
@@ -175,7 +184,7 @@ where
         self.send(ack).await
     }
 
-    pub async fn process_loop<F>(&mut self, f: F) -> Result<()>
+    pub async fn evloop<F>(&mut self, f: F) -> Result<()>
     where
         F: Fn(&Packet) -> bool,
     {
@@ -266,7 +275,7 @@ where
             if connect.protocol.level() != 4 {
                 self.send_connect_ack(false, ConnectCode::UnacceptableProtocolVersion)
                     .await?;
-                return Err(Box::new(ParseError::UnsupportedProtocolLevel));
+                return Err(Box::new(MqttError::UnsupportedProtocolLevel));
             }
             //let (tx, rx) = mpsc::unbounded_channel();
             let (tx, rx) = mpsc::unbounded();
@@ -279,60 +288,59 @@ where
             }
             Ok(())
         } else {
-            Err(Box::new(ParseError::Timeout(ttl)))
+            Err(Box::new(MqttError::Timeout(ttl)))
         }
     }
 
-    pub async fn connect<F>(
-        &mut self,
-        last_will: Option<LastWill>,
-        username: Option<ByteString>,
-        password: Option<Bytes>,
-        mut f: F,
-    ) -> Result<()>
-    where
-        F: FnMut(&mut Peer<T, U>, Tx),
-    {
-        let connect = Connect {
-            client_id: ByteString::from(self.client_id.to_string()),
-            protocol: Protocol::default(),
-            clean_session: self.clean_session,
-            keep_alive: self.keep_alive.as_secs() as u16,
-            last_will: last_will,
-            username: username,
-            password: password,
-        };
-        let ttl = Duration::from_secs(5);
-        self.send_connect(connect, ttl).await?;
-        match self.receive_timeout(ttl).await {
-            Ok(Some(Message::Mqtt(Packet::ConnectAck {
-                session_present: _,
-                return_code,
-            }))) => {
-                if return_code == ConnectCode::ConnectionAccepted {
-                    //let (tx, rx) = mpsc::unbounded_channel();
-                    let (tx, rx) = mpsc::unbounded();
-                    self.rx = Some(rx);
-                    f(self, tx);
-                }
-                Ok(())
-            }
-            Ok(ret) => {
-                println!("{:#?}", ret);
-                Ok(())
-            }
-            Err(e) => {
-                println!("{}", e);
-                Err(e)
-            }
-        }
-    }
+    // pub async fn connect<F>(
+    //     &mut self,
+    //     last_will: Option<LastWill>,
+    //     username: Option<ByteString>,
+    //     password: Option<Bytes>,
+    //     mut f: F,
+    // ) -> Result<()>
+    // where
+    //     F: FnMut(&mut Peer<T, U>, Tx),
+    // {
+    //     let connect = Connect {
+    //         client_id: ByteString::from(self.client_id.to_string()),
+    //         protocol: Protocol::default(),
+    //         clean_session: self.clean_session,
+    //         keep_alive: self.keep_alive.as_secs() as u16,
+    //         last_will: last_will,
+    //         username: username,
+    //         password: password,
+    //     };
+    //     let ttl = Duration::from_secs(5);
+    //     self.send_connect(connect, ttl).await?;
+    //     match self.receive_timeout(ttl).await {
+    //         Ok(Some(Message::Mqtt(Packet::ConnectAck {
+    //             session_present: _,
+    //             return_code,
+    //         }))) => {
+    //             if return_code == ConnectCode::ConnectionAccepted {
+    //                 //let (tx, rx) = mpsc::unbounded_channel();
+    //                 let (tx, rx) = mpsc::unbounded();
+    //                 self.rx = Some(rx);
+    //                 f(self, tx);
+    //             }
+    //             Ok(())
+    //         }
+    //         Ok(ret) => {
+    //             println!("{:#?}", ret);
+    //             Ok(())
+    //         }
+    //         Err(e) => {
+    //             println!("{}", e);
+    //             Err(e)
+    //         }
+    //     }
+    // }
 }
 
-impl<T, U> Stream for Peer<T, U>
+impl<T> Stream for Peer<T>
 where
     T: AsyncRead + Unpin,
-    U: Decoder<Item = Packet, Error = ParseError>,
 {
     type Item = Result<Message>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -341,7 +349,7 @@ where
                 return Poll::Ready(Some(Ok(msg)));
             }
         }
-        let result: Option<_> = ready!(Pin::new(&mut self.transport).poll_next(cx));
+        let result: Option<_> = ready!(Pin::new(&mut self.stream).poll_next(cx));
         Poll::Ready(match result {
             Some(Ok(msg)) => Some(Ok(Message::Mqtt(msg))),
             Some(Err(err)) => Some(Err(Box::new(err))),
@@ -350,10 +358,10 @@ where
     }
 }
 
-impl<T, U> Drop for Peer<T, U> {
+impl<T> Drop for Peer<T> {
     fn drop(&mut self) {
         drop(&mut self.client_id);
-        drop(&mut self.transport);
+        drop(&mut self.stream);
         if let Some(rx) = &mut self.rx {
             drop(rx);
         }

@@ -20,44 +20,45 @@ impl Client {
     pub async fn connect<A: AsRef<str>>(
         addr: A,
         client_id: String,
-        last_will: Option<LastWill>,
+        _last_will: Option<LastWill>,
         username: Option<ByteString>,
         password: Option<Bytes>,
     ) -> Result<Self> {
+        // let last_will = last_will.unwrap();
+        let username = username.unwrap();
+        let password = password.unwrap();
         loop {
             match TcpStream::connect(addr.as_ref()).await {
                 Ok(socket) => {
                     let paddr = socket.peer_addr().unwrap();
-                    let codec = Framed::new(socket, MqttCodec::new(paddr));
-                    let mut peer = Peer::from(&client_id, codec);
-                    peer.set_keepalive(Duration::from_secs(30));
-                    let mut c = Client { tx: None };
-                    match peer
-                        .connect(
-                            last_will.clone(),
-                            username.clone(),
-                            password.clone(),
-                            |_p, tx| c.tx = Some(tx),
-                        )
-                        .await
+                    if let Ok(stream) = MqttStream::connect(
+                        socket,
+                        Connect {
+                            client_id: ByteString::from(client_id.clone()),
+                            last_will: None,
+                            clean_session: false,
+                            protocol: Protocol::default(),
+                            username: Some(username.clone()),
+                            password: Some(password.clone()),
+                            keep_alive: 60,
+                        },
+                    )
+                    .await
                     {
-                        Ok(()) => {
-                            tokio::spawn(async move {
-                                if let Err(e) = peer.process_loop(|_packet| -> bool { true }).await
-                                {
-                                    println!(
-                                        "failed to process connection {}; error = {}",
-                                        peer.client_id, e
-                                    );
-                                }
-                            });
-                            return Ok(c);
+                        let mut peer = Peer::from(&client_id, stream, paddr);
+                        peer.set_keepalive(Duration::from_secs(30));
+                        if let Err(e) = peer.evloop(|_packet| -> bool { true }).await {
+                            println!(
+                                "failed to process connection {}; error = {}",
+                                peer.client_id, e
+                            );
                         }
-                        Err(e) => println!("peer.connect {} {}", addr.as_ref(), e),
+                        return Ok(Client { tx: None });
                     }
                 }
                 Err(e) => println!("tcp.connect {} {}", addr.as_ref(), e),
             }
+            delay_for(Duration::from_secs(5)).await;
         }
     }
 
