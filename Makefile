@@ -10,7 +10,9 @@ release:
 
 docker:
 	docker build --no-cache -t registry.cn-hangzhou.aliyuncs.com/bis28/rmqx .
+	docker build --no-cache -t registry.cn-hangzhou.aliyuncs.com/bis28/mqttclient -f client.Dockerfile .
 	docker push registry.cn-hangzhou.aliyuncs.com/bis28/rmqx
+	docker push registry.cn-hangzhou.aliyuncs.com/bis28/mqttclient
 
 clean:
 	cargo clean
