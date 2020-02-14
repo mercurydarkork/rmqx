@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
         .unwrap();
     let t = std::env::args()
         .nth(3)
-        .unwrap_or_else(|| "1".to_string())
+        .unwrap_or_else(|| "60".to_string())
         .parse()
         .unwrap();
 
