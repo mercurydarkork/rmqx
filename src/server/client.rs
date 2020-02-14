@@ -22,7 +22,7 @@ impl Client {
         _last_will: Option<LastWill>,
         username: Option<ByteString>,
         password: Option<Bytes>,
-    ) -> Result<Self> {
+    ) {
         // let last_will = last_will.unwrap();
         let username = username.unwrap();
         let password = password.unwrap();
@@ -52,7 +52,6 @@ impl Client {
                                 peer.client_id, e
                             );
                         }
-                        return Ok(Client { tx: None });
                     }
                 }
                 Err(e) => println!("tcp.connect {} {}", addr.as_ref(), e),

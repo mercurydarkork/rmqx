@@ -47,7 +47,7 @@ async fn main() -> Result<()> {
         let addr = addr.to_owned();
         let client_id = format!("{}-{}", i, Uuid::new_v4());
         tokio::spawn(async move {
-            let _ = Client::connect(
+            Client::connect(
                 &addr,
                 client_id,
                 None,
