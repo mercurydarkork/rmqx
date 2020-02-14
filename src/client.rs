@@ -41,8 +41,17 @@ async fn main() -> Result<()> {
     let addr = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "127.0.0.1:1883".to_string());
-    let n = std::env::args().nth(2).unwrap_or_else(|| "1".to_string());
-    let n = n.parse().unwrap();
+    let n = std::env::args()
+        .nth(2)
+        .unwrap_or_else(|| "1".to_string())
+        .parse()
+        .unwrap();
+    let t = std::env::args()
+        .nth(3)
+        .unwrap_or_else(|| "1".to_string())
+        .parse()
+        .unwrap();
+
     for i in 1..=n {
         let addr = addr.to_owned();
         let client_id = format!("{}-{}", i, Uuid::new_v4());
@@ -53,6 +62,7 @@ async fn main() -> Result<()> {
                 None,
                 Some(ByteString::from("username")),
                 Some(Bytes::from("password")),
+                t,
             )
             .await;
         });

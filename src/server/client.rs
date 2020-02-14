@@ -22,6 +22,7 @@ impl Client {
         _last_will: Option<LastWill>,
         username: Option<ByteString>,
         password: Option<Bytes>,
+        keepalive: u16,
     ) {
         // let last_will = last_will.unwrap();
         let username = username.unwrap();
@@ -39,13 +40,13 @@ impl Client {
                             protocol: Protocol::default(),
                             username: Some(username.clone()),
                             password: Some(password.clone()),
-                            keep_alive: 60,
+                            keep_alive: keepalive,
                         },
                     )
                     .await
                     {
                         let mut peer = Peer::from(&client_id, stream, paddr);
-                        peer.set_keepalive(Duration::from_secs(30));
+                        peer.set_keepalive(Duration::from_secs(keepalive as u64));
                         if let Err(e) = peer.evloop(|_packet| -> bool { true }).await {
                             println!(
                                 "failed to process connection {}; error = {}",
