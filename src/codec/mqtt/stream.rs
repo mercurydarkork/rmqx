@@ -11,8 +11,6 @@ use tokio::stream::Stream;
 // use tokio::stream::StreamExt;
 use futures::{SinkExt, StreamExt};
 
-use tokio_util::codec::{Decoder, Encoder};
-
 #[pin_project]
 pub struct MqttStream<T> {
     #[pin]

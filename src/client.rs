@@ -30,7 +30,6 @@ use std::fmt::Write;
 use tokio::net::TcpStream;
 use tokio::time::delay_for;
 use tokio::time::Duration;
-use tokio_util::codec::Framed;
 use uuid::Uuid;
 
 #[tokio::main]

@@ -17,7 +17,6 @@ use crate::server::*;
 use futures::channel::mpsc;
 use std::net::SocketAddr;
 use tokio::time::{timeout, Duration};
-use tokio_util::codec::{Decoder, Encoder, Framed};
 
 pub struct Peer<T> {
     pub remote_addr: SocketAddr,

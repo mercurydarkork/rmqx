@@ -23,7 +23,6 @@ use tokio::net::TcpListener;
 use tokio::stream::Stream;
 use tokio::time::delay_for;
 use tokio::time::Duration;
-use tokio_util::codec::{Decoder, Encoder, Framed};
 
 pub async fn serve_coap<T: AsRef<str>>(laddr: T) -> Result<()> {
     let mut server = Server::new(laddr.as_ref())?;

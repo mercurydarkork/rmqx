@@ -17,8 +17,8 @@ pub use self::stream::*;
 pub use self::topic::*;
 
 use bytes::BytesMut;
+use std::io;
 use std::io::Cursor;
-use tokio_util::codec::{Decoder, Encoder};
 
 bitflags! {
     pub struct ConnectFlags: u8 {
@@ -141,5 +141,29 @@ pub(crate) struct FixedHeader {
 impl Drop for MqttCodec {
     fn drop(&mut self) {
         // println!("drop {} mqtt codec", self.addr);
+    }
+}
+
+pub trait Encoder {
+    type Item;
+    type Error: From<io::Error>;
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error>;
+}
+
+pub trait Decoder {
+    type Item;
+    type Error: From<io::Error>;
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error>;
+    fn decode_eof(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        match self.decode(buf)? {
+            Some(frame) => Ok(Some(frame)),
+            None => {
+                if buf.is_empty() {
+                    Ok(None)
+                } else {
+                    Err(io::Error::new(io::ErrorKind::Other, "bytes remaining on stream").into())
+                }
+            }
+        }
     }
 }

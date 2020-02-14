@@ -10,7 +10,6 @@ use futures::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
 use tokio::time::delay_for;
 use tokio::time::{timeout, Duration};
-use tokio_util::codec::Framed;
 
 pub struct Client {
     tx: Option<Tx>,
