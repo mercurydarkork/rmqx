@@ -27,8 +27,8 @@ pub struct Peer<T> {
     pub last_will: Option<LastWill>,
     pub username: Option<ByteString>,
     pub password: Option<Bytes>,
-    pub rx: Option<Rx>,
-    pub tx: Option<Tx>,
+    pub rx: Rx,
+    pub tx: Tx,
     stream: MqttStream<T>,
     from: bool,
     // state: Arc<Shared>,
@@ -49,8 +49,8 @@ where
             last_will: None,
             username: None,
             password: None,
-            rx: Some(rx),
-            tx: Some(tx),
+            rx: rx,
+            tx: tx,
             from: false,
         }
     }
@@ -66,8 +66,8 @@ where
             last_will: None,
             username: None,
             password: None,
-            rx: Some(rx),
-            tx: Some(tx),
+            rx: rx,
+            tx: tx,
             from: true,
         }
     }
@@ -266,31 +266,31 @@ where
         Ok(())
     }
 
-    pub async fn handshake<F>(&mut self, f: F) -> Result<()>
-    where
-        F: Fn(&Connect, Tx) -> bool,
-    {
-        let ttl = Duration::from_secs(5);
-        if let Ok(Some(Message::Mqtt(Packet::Connect(connect)))) = self.receive_timeout(ttl).await {
-            if connect.protocol.level() != 4 {
-                self.send_connect_ack(false, ConnectCode::UnacceptableProtocolVersion)
-                    .await?;
-                return Err(Box::new(MqttError::UnsupportedProtocolLevel));
-            }
-            //let (tx, rx) = mpsc::unbounded_channel();
-            let (tx, rx) = mpsc::unbounded();
-            if f(&connect, tx.clone()) {
-                self.client_id = connect.client_id;
-                self.rx = Some(rx);
-                self.tx = Some(tx);
-                self.send_connect_ack(true, ConnectCode::ConnectionAccepted)
-                    .await?;
-            }
-            Ok(())
-        } else {
-            Err(Box::new(MqttError::Timeout(ttl)))
-        }
-    }
+    // pub async fn handshake<F>(&mut self, f: F) -> Result<()>
+    // where
+    //     F: Fn(&Connect, Tx) -> bool,
+    // {
+    //     let ttl = Duration::from_secs(5);
+    //     if let Ok(Some(Message::Mqtt(Packet::Connect(connect)))) = self.receive_timeout(ttl).await {
+    //         if connect.protocol.level() != 4 {
+    //             self.send_connect_ack(false, ConnectCode::UnacceptableProtocolVersion)
+    //                 .await?;
+    //             return Err(Box::new(MqttError::UnsupportedProtocolLevel));
+    //         }
+    //         //let (tx, rx) = mpsc::unbounded_channel();
+    //         let (tx, rx) = mpsc::unbounded();
+    //         if f(&connect, tx.clone()) {
+    //             self.client_id = connect.client_id;
+    //             self.rx = Some(rx);
+    //             self.tx = Some(tx);
+    //             self.send_connect_ack(true, ConnectCode::ConnectionAccepted)
+    //                 .await?;
+    //         }
+    //         Ok(())
+    //     } else {
+    //         Err(Box::new(MqttError::Timeout(ttl)))
+    //     }
+    // }
 
     // pub async fn connect<F>(
     //     &mut self,
@@ -344,10 +344,10 @@ where
 {
     type Item = Result<Message>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if let Some(rx) = &mut self.rx {
-            if let Poll::Ready(Some(msg)) = Pin::new(rx).poll_next(cx) {
-                return Poll::Ready(Some(Ok(msg)));
-            }
+        // if let Some(rx) = &mut self.rx {
+        // }
+        if let Poll::Ready(Some(msg)) = Pin::new(&mut self.rx).poll_next(cx) {
+            return Poll::Ready(Some(Ok(msg)));
         }
         let result: Option<_> = ready!(Pin::new(&mut self.stream).poll_next(cx));
         Poll::Ready(match result {
@@ -358,15 +358,11 @@ where
     }
 }
 
-impl<T> Drop for Peer<T> {
-    fn drop(&mut self) {
-        drop(&mut self.client_id);
-        drop(&mut self.stream);
-        if let Some(rx) = &mut self.rx {
-            drop(rx);
-        }
-        if let Some(tx) = &mut self.tx {
-            drop(tx);
-        }
-    }
-}
+// impl<T> Drop for Peer<T> {
+//     fn drop(&mut self) {
+//         drop(&mut self.client_id);
+//         drop(&mut self.stream);
+//         // drop(&mut self.rx);
+//         // drop(&mut self.tx);
+//     }
+// }

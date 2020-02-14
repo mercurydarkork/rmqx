@@ -128,13 +128,24 @@ pub async fn serve_tls<T: AsRef<str>, U: AsRef<std::path::Path>, W: AsRef<str>>(
                 let tls_acceptor = tls_acceptor.clone();
                 tokio::spawn(async move {
                     if let Ok(socket) = tls_acceptor.accept(socket).await {
+                        let mut connect = None;
                         if let Ok(stream) = MqttStream::accept(socket, |conn| -> bool {
-                            println!("on connect {:#?}", conn);
+                            //println!("on connect {:#?}", conn);
+                            connect = Some(conn);
                             true
                         })
                         .await
                         {
-                            process(Peer::new(stream, addr)).await
+                            if let Some(conn) = connect {
+                                let mut peer = Peer::new(stream, addr);
+                                peer.client_id = conn.client_id;
+                                peer.keep_alive = Duration::from_secs((conn.keep_alive + 5) as u64);
+                                peer.last_will = conn.last_will;
+                                peer.clean_session = conn.clean_session;
+                                peer.username = conn.username;
+                                peer.password = conn.password;
+                                process(peer).await
+                            }
                         }
                         //process(Peer::new(Framed::new(socket, MqttCodec::new())), addr).await
                     }
@@ -157,7 +168,7 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
                 tokio::spawn(async move {
                     let mut connect = None;
                     if let Ok(stream) = MqttStream::accept(socket, |conn| -> bool {
-                        println!("on connect {:#?}", conn);
+                        //println!("on connect {:#?}", conn);
                         connect = Some(conn);
                         true
                     })
@@ -185,6 +196,7 @@ async fn process<T>(peer: Peer<T>)
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
+    &state.add_peer(peer.client_id.clone(), peer.tx.clone());
     let mut peer = peer;
     if let Err(e) = peer
         .evloop(|packet| -> bool {
@@ -199,10 +211,10 @@ where
         );
     }
     &state.remove_peer(&peer.client_id);
-    println!(
-        "exit to process connection {} {}",
-        peer.client_id, peer.remote_addr
-    );
+    // println!(
+    //     "exit to process connection {} {}",
+    //     peer.client_id, peer.remote_addr
+    // );
     drop(peer);
 }
 
