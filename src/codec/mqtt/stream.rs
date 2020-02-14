@@ -1,5 +1,6 @@
 use crate::codec::mqtt::*;
 use bytes::{Buf, BytesMut};
+use chrono::prelude::*;
 use futures_sink::Sink;
 use pin_project::{pin_project, pinned_drop};
 use std::io;
@@ -27,8 +28,23 @@ pub struct MqttStream<T> {
 #[pinned_drop]
 impl<T> PinnedDrop for MqttStream<T> {
     fn drop(self: Pin<&mut Self>) {
+        // println!(
+        //     "{} Dropping MqttStream.pinned io field: {:p}",
+        //     Local::now(),
+        //     &self.io
+        // );
         let _ = self.io;
+        // println!(
+        //     "{} Dropping MqttStream.pinned rbuffer field: {:p}",
+        //     Local::now(),
+        //     &self.rbuffer
+        // );
         let _ = self.rbuffer;
+        // println!(
+        //     "{} Dropping MqttStream.pinned wbuffer field: {:p}",
+        //     Local::now(),
+        //     &self.wbuffer
+        // );
         let _ = self.wbuffer;
         // println!("Dropping pinned field: {:?}", self.io);
         // println!("Dropping unpin field: {:?}", self.rbuffer);
@@ -103,6 +119,7 @@ where
 impl<T: AsyncRead> Stream for MqttStream<T> {
     type Item = Result<Packet, MqttError>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        //println!("{} AsyncRead.poll_next", Local::now());
         let mut pinned = self.project();
         loop {
             if *pinned.is_readable {
@@ -134,6 +151,7 @@ impl<T: AsyncWrite> Sink<Packet> for MqttStream<T> {
     type Error = MqttError;
 
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        //println!("{} AsyncWrite.poll_next", Local::now());
         if self.wbuffer.len() >= BACKPRESSURE_BOUNDARY {
             match self.as_mut().poll_flush(cx) {
                 Poll::Pending => return Poll::Pending,
@@ -149,12 +167,14 @@ impl<T: AsyncWrite> Sink<Packet> for MqttStream<T> {
     }
 
     fn start_send(self: Pin<&mut Self>, item: Packet) -> Result<(), Self::Error> {
+        //println!("{} AsyncWrite.start_send", Local::now());
         let mut pinned = self.project();
         pinned.codec.encode(item, &mut pinned.wbuffer)?;
         Ok(())
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        //println!("{} AsyncWrite.poll_flush", Local::now());
         let mut pinned = self.project();
         while !pinned.wbuffer.is_empty() {
             let buf = &pinned.wbuffer;
@@ -179,6 +199,7 @@ impl<T: AsyncWrite> Sink<Packet> for MqttStream<T> {
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        //println!("{} AsyncWrite.poll_close", Local::now());
         ready!(self.as_mut().poll_flush(cx))?;
         ready!(self.project().io.poll_shutdown(cx))?;
         Poll::Ready(Ok(()))
@@ -198,11 +219,3 @@ where
             .finish()
     }
 }
-
-// impl<T> Drop for MqttStream<T> {
-//     fn drop(&mut self) {
-//         drop(&mut self.rbuffer);
-//         drop(&mut self.wbuffer);
-//         // println!("drop {} mqtt codec", self.addr);
-//     }
-// }

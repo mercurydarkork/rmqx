@@ -150,7 +150,7 @@ pub async fn serve_tls<T: AsRef<str>, U: AsRef<std::path::Path>, W: AsRef<str>>(
                     }
                 });
             }
-            Err(e) => println!("error accepting socket; error = {:?}", e),
+            Err(e) => println!("{} error accepting socket; error = {:?}", Local::now(), e),
         }
     }
 }
@@ -162,7 +162,7 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
         match listener.accept().await {
             Ok((socket, addr)) => {
                 socket.set_nodelay(true)?;
-                socket.set_keepalive(Some(std::time::Duration::new(60, 0)))?; //启用发送TCP KEEPALIVE数据包
+                //socket.set_keepalive(Some(std::time::Duration::new(60, 0)))?; //启用发送TCP KEEPALIVE数据包
                 socket.set_ttl(15)?; //发送数据包的生存时间
                 tokio::spawn(async move {
                     let mut connect = None;
@@ -186,7 +186,7 @@ pub async fn serve<T: AsRef<str>>(laddr: T) -> Result<()> {
                     }
                 });
             }
-            Err(e) => println!("error accepting socket; error = {:?}", e),
+            Err(e) => println!("{} error accepting socket; error = {:?}", Local::now(), e),
         }
     }
 }
@@ -198,15 +198,18 @@ where
     &state.add_peer(peer.client_id.clone(), peer.tx.clone());
     let mut peer = peer;
     if let Err(e) = peer
-        .evloop(|packet| -> bool {
-            println!("on packet {:#?}", packet);
+        .evloop(|_packet| -> bool {
+            //println!("{} on packet {:#?}",Local::now(), packet);
             true
         })
         .await
     {
         println!(
-            "failed to process connection {} {}; error = {}",
-            peer.client_id, peer.remote_addr, e
+            "{} failed to process connection {} {}; error = {}",
+            Local::now(),
+            peer.client_id,
+            peer.remote_addr,
+            e
         );
     }
     &state.remove_peer(&peer.client_id);
