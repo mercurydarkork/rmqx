@@ -1,7 +1,7 @@
 use crate::codec::mqtt::*;
 use bytes::{Buf, BytesMut};
 use futures_sink::Sink;
-use pin_project::pin_project;
+use pin_project::{pin_project, pinned_drop};
 use std::io;
 use std::marker::Unpin;
 use std::pin::Pin;
@@ -11,7 +11,7 @@ use tokio::stream::Stream;
 // use tokio::stream::StreamExt;
 use futures::{SinkExt, StreamExt};
 
-#[pin_project]
+#[pin_project(PinnedDrop)]
 pub struct MqttStream<T> {
     #[pin]
     io: T,
@@ -22,6 +22,17 @@ pub struct MqttStream<T> {
     is_readable: bool,
     rbuffer: BytesMut,
     wbuffer: BytesMut,
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for MqttStream<T> {
+    fn drop(self: Pin<&mut Self>) {
+        let _ = self.io;
+        let _ = self.rbuffer;
+        let _ = self.wbuffer;
+        // println!("Dropping pinned field: {:?}", self.io);
+        // println!("Dropping unpin field: {:?}", self.rbuffer);
+    }
 }
 
 const INITIAL_CAPACITY: usize = 4 * 1024;
@@ -187,3 +198,11 @@ where
             .finish()
     }
 }
+
+// impl<T> Drop for MqttStream<T> {
+//     fn drop(&mut self) {
+//         drop(&mut self.rbuffer);
+//         drop(&mut self.wbuffer);
+//         // println!("drop {} mqtt codec", self.addr);
+//     }
+// }
